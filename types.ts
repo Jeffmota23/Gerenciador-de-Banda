@@ -38,7 +38,8 @@ export enum AttendanceStatus {
   CONFIRMED = 'CONFIRMED',    // RSVP Yes
   LATE_CANCEL = 'LATE_CANCEL',// Cancelled after deadline
   PRESENT = 'PRESENT',        // Marked by Manager
-  ABSENT = 'ABSENT'           // No-show marked by Manager
+  ABSENT = 'ABSENT',          // No-show marked by Manager
+  DECLINED = 'DECLINED'       // User explicitly refused
 }
 
 export interface AttendanceRecord {
@@ -46,6 +47,7 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   timestamp: number;
   xpAwarded: number; // Track XP given/taken for this specific event to allow reversals
+  cancellationReason?: string; // Reason for cancellation if status is LATE_CANCEL or removed
 }
 
 export interface LocationData {
@@ -85,11 +87,10 @@ export interface EventItem extends BaseItem {
   rsvpDeadline: number; 
   location?: LocationData | string; 
   
-  // CHANGED: Complex object for attendance
   attendees: AttendanceRecord[]; 
   
   givesXp: boolean;
-  linkedMaterialIds?: string[]; // CHANGED: Now supports multiple IDs
+  linkedMaterialIds?: string[];
 }
 
 export interface RepertoireItem extends BaseItem {
@@ -120,9 +121,21 @@ export interface PollData {
   showVoters: boolean;
 }
 
+export interface Comment {
+  id: string;
+  authorId: string; // User ID
+  authorName: string; // Cached display name
+  content: string;
+  createdAt: number;
+  updatedAt?: number;
+  likedBy: string[]; // Array of User IDs
+  replies: Comment[]; // Nested replies
+}
+
 export interface PostItem extends BaseItem {
   type: ItemType.POST;
-  postType: 'TEXT' | 'POLL'; 
+  postType: 'TEXT' | 'POLL';
+  category: 'WALL' | 'COMMUNITY'; // NEW FIELD: Defines where the post belongs
   
   content?: string; 
   mediaUrls?: string[]; 
@@ -133,11 +146,16 @@ export interface PostItem extends BaseItem {
   poll?: PollData;
 
   videoUrl?: string; 
-  audioUrl?: string; // New field for Audio posts
+  audioUrl?: string; 
   
-  likes: number;
-  comments: number;
-  visibility: 'PUBLIC' | 'FOLLOWERS'; 
+  // CHANGED: From number to array/object for rich interaction
+  likedBy: string[]; // User IDs
+  comments: Comment[];
+  
+  visibility: 'PUBLIC' | 'FOLLOWERS';
+  
+  // NEW: Shared Post Reference
+  originalPostId?: string;
 }
 
 export interface FinanceItem extends BaseItem {
@@ -180,15 +198,26 @@ export interface AppContextType extends AppState {
   deleteItem: (itemId: string, reason: string) => void;
   restoreItem: (itemId: string) => void;
   addRepertoire: (item: Omit<RepertoireItem, 'id' | 'createdAt' | 'authorId' | 'type'>) => void;
-  addPost: (post: Omit<PostItem, 'id' | 'createdAt' | 'authorId' | 'type' | 'likes' | 'comments'>) => void;
+  addPost: (post: Omit<PostItem, 'id' | 'createdAt' | 'authorId' | 'type' | 'likedBy' | 'comments'>) => void;
+  sharePost: (originalPostId: string, commentary?: string) => void; // NEW
   votePoll: (postId: string, optionId: string) => void; 
   toggleFinanceApproval: (id: string) => void;
-  addEvent: (event: Omit<EventItem, 'id' | 'createdAt' | 'authorId' | 'type' | 'attendees'>) => void;
+  addEvent: (event: Omit<EventItem, 'id' | 'createdAt' | 'authorId' | 'type' | 'attendees'> & { attendees?: AttendanceRecord[] }) => void;
   
-  // CHANGED: New complex handler
-  handleEventAction: (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL') => void;
+  handleEventAction: (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL' | 'DECLINE', reason?: string) => void;
   markAttendance: (eventId: string, userId: string, status: AttendanceStatus.PRESENT | AttendanceStatus.ABSENT) => void;
   
   toggleFollow: (targetUserId: string) => void;
   addNewsSource: (source: Omit<NewsSource, 'id' | 'status'>) => void;
+
+  // NEW INTERACTION HANDLERS
+  togglePostLike: (postId: string) => void;
+  addComment: (postId: string, content: string, parentCommentId?: string) => void;
+  editComment: (postId: string, commentId: string, newContent: string) => void;
+  deleteComment: (postId: string, commentId: string) => void;
+  toggleCommentLike: (postId: string, commentId: string) => void;
+
+  // SYSTEM NOTIFICATIONS
+  notificationPermission: NotificationPermission;
+  requestNotificationPermission: () => Promise<void>;
 }

@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { User } from '../types';
-import { LogOut, Award, TrendingUp, Music, Mail, Shield, Star } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Music, Mail, Shield, Star, Bell, BellOff, BellRing } from 'lucide-react';
+import { useApp } from '../App';
 
 interface Props {
   user: User;
@@ -9,6 +10,8 @@ interface Props {
 }
 
 export const Profile: React.FC<Props> = ({ user, onLogout }) => {
+  const { notificationPermission, requestNotificationPermission } = useApp();
+
   // Calculate XP Progress (Simple mock formula: each level is 200 XP)
   // Note: With the new XP Matrix, levels might scale faster, but keeping 200 for demo simplicity
   const xpForNextLevel = (user.level + 1) * 200;
@@ -82,7 +85,39 @@ export const Profile: React.FC<Props> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* 3. Account Details */}
+      {/* 3. System Preferences (Notifications) */}
+      <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
+        <h3 className="px-6 py-4 border-b border-navy-700 font-bold text-bege-100 flex items-center gap-2">
+          <Bell className="w-4 h-4" /> Preferências do Sistema
+        </h3>
+        <div className="p-6 flex items-center justify-between">
+            <div>
+               <p className="text-sm font-bold text-bege-50">Notificações no Dispositivo</p>
+               <p className="text-xs text-bege-200/50 mt-1 max-w-xs">
+                 Receba alertas sobre novos eventos, avisos do mural e atualizações de repertório mesmo com o app fechado.
+               </p>
+            </div>
+            
+            {notificationPermission === 'granted' ? (
+              <div className="flex items-center gap-2 text-green-500 font-bold text-xs bg-green-900/20 px-3 py-1.5 rounded-full border border-green-500/20">
+                 <BellRing className="w-4 h-4" /> Ativo
+              </div>
+            ) : notificationPermission === 'denied' ? (
+              <div className="flex items-center gap-2 text-red-400 font-bold text-xs bg-red-900/20 px-3 py-1.5 rounded-full border border-red-500/20">
+                 <BellOff className="w-4 h-4" /> Bloqueado
+              </div>
+            ) : (
+              <button 
+                onClick={requestNotificationPermission}
+                className="bg-ocre-600 hover:bg-ocre-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg text-xs flex items-center gap-2"
+              >
+                 <Bell className="w-4 h-4" /> Ativar
+              </button>
+            )}
+        </div>
+      </div>
+
+      {/* 4. Account Details */}
       <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
         <h3 className="px-6 py-4 border-b border-navy-700 font-bold text-bege-100 flex items-center gap-2">
           <Shield className="w-4 h-4" /> Detalhes da Conta
@@ -105,7 +140,7 @@ export const Profile: React.FC<Props> = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* 4. Logout Action */}
+      {/* 5. Logout Action */}
       <button 
         onClick={onLogout}
         className="w-full py-4 rounded-xl border border-red-900/50 bg-red-900/10 text-red-400 hover:bg-red-900/30 hover:border-red-500/50 transition-all font-bold flex items-center justify-center gap-2"

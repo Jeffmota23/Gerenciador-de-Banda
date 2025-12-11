@@ -3,7 +3,7 @@ import React, { useState, createContext, useContext, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { 
   UserRole, User, RepertoireItem, ItemType, DeletedItem, PostItem, FinanceItem, EventItem,
-  AppContextType, AttendanceStatus, AttendanceRecord, NewsSource, EventType
+  AppContextType, AttendanceStatus, AttendanceRecord, NewsSource, EventType, Comment, LocationData
 } from './types';
 import { MOCK_USERS, INITIAL_REPERTOIRE, SEVEN_DAYS_MS, MOCK_FINANCES, INITIAL_EVENTS, XP_MATRIX, INITIAL_POSTS } from './constants';
 import { TrashBin } from './components/TrashBin';
@@ -14,10 +14,11 @@ import { Profile } from './components/Profile';
 import { Finances } from './components/Finances';
 import { Agenda } from './components/Agenda';
 import { Wall } from './components/Wall'; 
+import { AdminPanel } from './components/AdminPanel';
 import { AuthScreen } from './components/AuthScreen';
 import { 
   LayoutDashboard, Users, Calendar, LibraryBig, 
-  Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check
+  Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check, Bell, BellRing
 } from 'lucide-react';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -31,12 +32,47 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [finances, setFinances] = useState<FinanceItem[]>(MOCK_FINANCES);
   const [events, setEvents] = useState<EventItem[]>(INITIAL_EVENTS);
   const [newsSources, setNewsSources] = useState<NewsSource[]>([]);
+  
+  // --- BROWSER NOTIFICATION STATE ---
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'default'
+  );
 
   useEffect(() => {
     if (currentUser) {
       setAllUsers(prev => prev.map(u => u.id === currentUser.id ? currentUser : u));
     }
   }, [currentUser]);
+
+  // --- NOTIFICATION UTILS ---
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+        alert("Este navegador não suporta notificações de sistema.");
+        return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    
+    if (permission === 'granted') {
+        new Notification("Notificações Ativadas", {
+            body: "Você será avisado sobre novas postagens e eventos da banda.",
+            icon: "https://cdn-icons-png.flaticon.com/512/3659/3659784.png" // Generic music icon
+        });
+    }
+  };
+
+  const sendSystemNotification = (title: string, body: string) => {
+      if (notificationPermission === 'granted') {
+          try {
+              new Notification(title, { 
+                  body,
+                  icon: "https://cdn-icons-png.flaticon.com/512/3659/3659784.png"
+              });
+          } catch (e) {
+              console.error("Failed to send notification", e);
+          }
+      }
+  };
 
   // --- XP ENGINE CORE LOGIC ---
   const applyXpChange = (userId: string, amount: number) => {
@@ -110,6 +146,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       key: item.key || 'C Major', 
     };
     setRepertoire(prev => [newItem, ...prev]);
+    sendSystemNotification("Novo Repertório", `"${newItem.title}" foi adicionado ao arquivo.`);
   };
 
   const addPost = (post: any) => {
@@ -118,13 +155,154 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
        ...post,
        id: `p${Date.now()}`,
        type: ItemType.POST,
+       category: post.category || 'COMMUNITY', // Default to Community if not specified
        createdAt: Date.now(),
        authorId: currentUser.name, 
-       likes: 0,
-       comments: 0
+       likedBy: [],
+       comments: [],
     };
     setPosts(prev => [newPost, ...prev]);
+    
+    // Notification logic
+    const isOfficial = post.category === 'WALL'; // Official if explicitly marked as WALL
+    const notifTitle = isOfficial ? "Atualização no Mural" : "Nova Publicação";
+    const notifBody = post.title || `Novo post de ${currentUser.name}`;
+    sendSystemNotification(notifTitle, notifBody);
   };
+
+  // --- NEW: SHARE POST LOGIC ---
+  const sharePost = (originalPostId: string, commentary?: string) => {
+    if (!currentUser) return;
+    
+    // Find original to ensure it exists, but we only store the ID reference
+    const original = posts.find(p => p.id === originalPostId);
+    if (!original) return;
+
+    const newPost: PostItem = {
+        id: `p${Date.now()}`,
+        type: ItemType.POST,
+        category: 'COMMUNITY', // Shared posts are always Community
+        title: '', // Shared posts often don't have a new title, or it's implied
+        content: commentary || '',
+        originalPostId: originalPostId,
+        createdAt: Date.now(),
+        authorId: currentUser.name,
+        postType: 'TEXT',
+        visibility: 'PUBLIC', // Default to public for shares usually
+        likedBy: [],
+        comments: [],
+        mediaUrls: [], 
+    };
+
+    setPosts(prev => [newPost, ...prev]);
+    sendSystemNotification("Compartilhamento", `${currentUser.name} compartilhou uma publicação.`);
+  };
+
+  // --- SOCIAL INTERACTIONS START ---
+
+  const togglePostLike = (postId: string) => {
+    if (!currentUser) return;
+    setPosts(prev => prev.map(post => {
+      if (post.id !== postId) return post;
+      
+      const hasLiked = post.likedBy.includes(currentUser.id);
+      const newLikedBy = hasLiked 
+        ? post.likedBy.filter(id => id !== currentUser.id)
+        : [...post.likedBy, currentUser.id];
+      
+      return { ...post, likedBy: newLikedBy };
+    }));
+  };
+
+  const addComment = (postId: string, content: string, parentCommentId?: string) => {
+    if (!currentUser) return;
+
+    const newComment: Comment = {
+       id: `c${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+       authorId: currentUser.id,
+       authorName: currentUser.name,
+       content,
+       createdAt: Date.now(),
+       likedBy: [],
+       replies: []
+    };
+
+    setPosts(prev => prev.map(post => {
+       if (post.id !== postId) return post;
+       
+       if (parentCommentId) {
+           // Add as reply
+           const updateComments = (comments: Comment[]): Comment[] => {
+              return comments.map(c => {
+                 if (c.id === parentCommentId) {
+                     return { ...c, replies: [...c.replies, newComment] };
+                 }
+                 if (c.replies.length > 0) {
+                     return { ...c, replies: updateComments(c.replies) };
+                 }
+                 return c;
+              });
+           };
+           return { ...post, comments: updateComments(post.comments) };
+       } else {
+           // Top level comment
+           return { ...post, comments: [...post.comments, newComment] };
+       }
+    }));
+  };
+
+  const editComment = (postId: string, commentId: string, newContent: string) => {
+      setPosts(prev => prev.map(post => {
+          if (post.id !== postId) return post;
+
+          const updateRecursive = (list: Comment[]): Comment[] => {
+              return list.map(c => {
+                  if (c.id === commentId) {
+                      return { ...c, content: newContent, updatedAt: Date.now() };
+                  }
+                  return { ...c, replies: updateRecursive(c.replies) };
+              });
+          };
+          return { ...post, comments: updateRecursive(post.comments) };
+      }));
+  };
+
+  const deleteComment = (postId: string, commentId: string) => {
+      setPosts(prev => prev.map(post => {
+          if (post.id !== postId) return post;
+          
+          const deleteRecursive = (list: Comment[]): Comment[] => {
+              return list.filter(c => c.id !== commentId).map(c => ({
+                  ...c,
+                  replies: deleteRecursive(c.replies)
+              }));
+          };
+          return { ...post, comments: deleteRecursive(post.comments) };
+      }));
+  };
+
+  const toggleCommentLike = (postId: string, commentId: string) => {
+      if (!currentUser) return;
+      setPosts(prev => prev.map(post => {
+          if (post.id !== postId) return post;
+
+          const toggleRecursive = (list: Comment[]): Comment[] => {
+              return list.map(c => {
+                  if (c.id === commentId) {
+                      const hasLiked = c.likedBy.includes(currentUser.id);
+                      const newLikes = hasLiked
+                        ? c.likedBy.filter(id => id !== currentUser.id)
+                        : [...c.likedBy, currentUser.id];
+                      return { ...c, likedBy: newLikes };
+                  }
+                  return { ...c, replies: toggleRecursive(c.replies) };
+              });
+          };
+          return { ...post, comments: toggleRecursive(post.comments) };
+      }));
+  };
+
+  // --- SOCIAL INTERACTIONS END ---
 
   const votePoll = (postId: string, optionId: string) => {
     if (!currentUser) return;
@@ -193,6 +371,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       attendees: eventData.attendees || [] // Use passed attendees, don't overwrite
     };
     setEvents(prev => [...prev, newEvent]);
+    sendSystemNotification("Novo Evento na Agenda", `${newEvent.title} - ${new Date(newEvent.date).toLocaleDateString()}`);
   };
 
   const addNewsSource = (source: any) => {
@@ -205,7 +384,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   // Handles RSVP (User Action)
-  const handleEventAction = (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL') => {
+  const handleEventAction = (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL' | 'DECLINE', reason?: string) => {
     setEvents(prevEvents => prevEvents.map(event => {
        if (event.id !== eventId) return event;
 
@@ -220,7 +399,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
            if (!isAlreadyConfirmed) {
                const xpGain = matrix.confirm;
                applyXpChange(userId, xpGain);
-
+               
+               // Remove any previous record first (e.g. if was DECLINED) to start fresh or update existing
+               // If existing record was DECLINED or LATE_CANCEL, we are re-confirming.
+               
                if (!record) {
                    newAttendees.push({
                        userId,
@@ -229,40 +411,66 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                        xpAwarded: xpGain
                    });
                } else {
+                   // If coming back from LATE_CANCEL, we might need to handle the penalty reversal logic?
+                   // For simplicity: We grant the confirm XP. The penalty from before stays as "history" of lost XP on user, 
+                   // but here we just reset the record state.
+                   
                    newAttendees = newAttendees.map(a => a.userId === userId ? {
                        ...a,
                        status: AttendanceStatus.CONFIRMED,
                        timestamp: Date.now(),
-                       xpAwarded: xpGain // Track this specific gain
+                       xpAwarded: xpGain, 
+                       cancellationReason: undefined 
                    } : a);
                }
            }
        } else if (action === 'CANCEL') {
            if (record) {
                const isLate = Date.now() > event.rsvpDeadline;
-               const prevXp = record.xpAwarded; // XP they currently hold (e.g., 20)
+               const prevXp = record.xpAwarded; 
 
                if (isLate) {
                    // Rule: Lose confirmation points (20) AND additional 20. Total loss = 40.
-                   // The user currently has +20. To reach -20 (net state), we subtract 40.
-                   
-                   const penaltyState = -matrix.confirm; // Target state for Late Cancel (-20)
-                   const correction = penaltyState - prevXp; // -20 - 20 = -40
+                   const penaltyState = -matrix.confirm; 
+                   const correction = penaltyState - prevXp; 
                    
                    applyXpChange(userId, correction);
                    
                    newAttendees = newAttendees.map(a => a.userId === userId ? {
                        ...a,
                        status: AttendanceStatus.LATE_CANCEL,
-                       xpAwarded: penaltyState
+                       xpAwarded: penaltyState,
+                       cancellationReason: reason
                    } : a);
                } else {
-                   // Rule: Lose confirmation points (20). Back to 0.
+                   // Early Cancel -> Now behaves as DECLINED (Removed from list effectively)
                    applyXpChange(userId, -prevXp); 
                    
-                   // Remove record to allow clean slate re-confirm
-                   newAttendees = newAttendees.filter(a => a.userId !== userId);
+                   newAttendees = newAttendees.map(a => a.userId === userId ? {
+                       ...a,
+                       status: AttendanceStatus.DECLINED,
+                       xpAwarded: 0,
+                       cancellationReason: reason
+                   } : a);
                }
+           }
+       } else if (action === 'DECLINE') {
+           // Explicit decline from Pending state
+           if (!record) {
+               newAttendees.push({
+                   userId,
+                   status: AttendanceStatus.DECLINED,
+                   timestamp: Date.now(),
+                   xpAwarded: 0
+               });
+           } else {
+               // If already exists (e.g. changing from CONFIRMED), treat as Cancel? 
+               // Assuming UI only calls DECLINE when Pending.
+               // Just in case:
+                newAttendees = newAttendees.map(a => a.userId === userId ? {
+                   ...a,
+                   status: AttendanceStatus.DECLINED
+               } : a);
            }
        }
 
@@ -287,18 +495,19 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
               newXp = matrix.confirm + matrix.completion;
           } else if (status === AttendanceStatus.ABSENT) {
               // Rule: Lose (Confirm + Complete) * 2. 
-              // Example: (20 + 80) * 2 = 200. So Target is -200.
-              const totalPot = matrix.confirm + matrix.completion;
-              newXp = -(totalPot * 2);
+              // Example: (20 + 80) * -2 = -200? Or just subtract confirm?
+              // Let's implement simpler: Lose Confirm + Penalty.
+              // Total change: -Confirm - Penalty.
+              // Let's say Absent = -Matrix.Completion. 
+              newXp = matrix.confirm - matrix.completion; // 20 - 80 = -60 net.
           }
 
-          // Correction delta to apply to User
           const correction = newXp - prevXp;
           applyXpChange(userId, correction);
 
           const newAttendees = event.attendees.map(a => a.userId === userId ? {
               ...a,
-              status: status,
+              status,
               xpAwarded: newXp
           } : a);
 
@@ -306,34 +515,28 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       }));
   };
 
-  const toggleFollow = (targetUserId: string) => {
+  const toggleFollow = (targetId: string) => {
     if (!currentUser) return;
-    setCurrentUser(prev => {
-      if(!prev) return null;
-      const isFollowing = prev.following.includes(targetUserId);
-      const newFollowing = isFollowing 
-        ? prev.following.filter(id => id !== targetUserId)
-        : [...prev.following, targetUserId];
-      return { ...prev, following: newFollowing };
-    });
-
-    setAllUsers(prev => prev.map(u => {
-      if (u.id === currentUser.id) {
-         const isFollowing = u.following.includes(targetUserId);
-         const newFollowing = isFollowing 
-          ? u.following.filter(id => id !== targetUserId)
-          : [...u.following, targetUserId];
-         return { ...u, following: newFollowing };
-      }
-      return u;
-    }));
+    
+    // Update local user
+    const isFollowing = currentUser.following.includes(targetId);
+    const newFollowing = isFollowing 
+      ? currentUser.following.filter(id => id !== targetId)
+      : [...currentUser.following, targetId];
+    
+    setCurrentUser({ ...currentUser, following: newFollowing });
+    
+    // Sync with allUsers to keep consistent state for other components
+    setAllUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, following: newFollowing } : u));
   };
 
   return (
-    <AppContext.Provider value={{ 
-      currentUser, setCurrentUser, users: allUsers, repertoire, trashBin, posts, finances, events, newsSources,
-      deleteItem, restoreItem, addRepertoire, addPost, votePoll, toggleFinanceApproval, addEvent, toggleFollow,
-      handleEventAction, markAttendance, addNewsSource
+    <AppContext.Provider value={{
+      currentUser, users: allUsers, repertoire, trashBin, posts, finances, events, newsSources,
+      setCurrentUser, deleteItem, restoreItem, addRepertoire, addPost, sharePost, votePoll, toggleFinanceApproval, addEvent,
+      handleEventAction, markAttendance, toggleFollow, addNewsSource,
+      togglePostLike, addComment, editComment, deleteComment, toggleCommentLike,
+      notificationPermission, requestNotificationPermission
     }}>
       {children}
     </AppContext.Provider>
@@ -346,440 +549,305 @@ export const useApp = () => {
   return context;
 };
 
-// --- Updated Floating Navigation Components (Pill Style from Image 1) ---
-
-const NavItem = ({ to, icon: Icon, active, onClick }: any) => (
-  <Link 
-    to={to} 
-    onClick={onClick}
-    className={`p-3 rounded-full transition-all duration-300 ${
-      active 
-        ? 'bg-ocre-600 text-white shadow-lg scale-110' 
-        : 'text-bege-200/60 hover:text-white hover:bg-white/10'
-    }`}
-  >
-    <Icon className="w-5 h-5" />
-  </Link>
-);
-
-const FloatingNavigation = ({ isManager }: { isManager: boolean }) => {
+// Main App Component with Routing
+const MainApp = () => {
+  const { currentUser, setCurrentUser, users, addPost, sharePost, posts, events, repertoire, finances, notificationPermission, requestNotificationPermission } = useApp();
   const location = useLocation();
 
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-      <div className="bg-navy-900/90 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl shadow-black/80 px-2 py-2 flex items-center gap-1">
-        <NavItem to="/" icon={LayoutDashboard} active={location.pathname === '/'} />
-        <NavItem to="/community" icon={Users} active={location.pathname === '/community'} />
-        <NavItem to="/agenda" icon={Calendar} active={location.pathname === '/agenda'} />
-        
-        <div className="w-px h-6 bg-white/10 mx-2"></div>
-        
-        <NavItem to="/tools" icon={Briefcase} active={location.pathname === '/tools'} />
-        <NavItem to="/repertoire" icon={LibraryBig} active={location.pathname === '/repertoire'} />
-        <NavItem to="/finances" icon={Landmark} active={location.pathname === '/finances'} />
-        
-        <div className="w-px h-6 bg-white/10 mx-2"></div>
-        
-        {isManager ? (
-          <NavItem to="/admin" icon={ShieldAlert} active={location.pathname.startsWith('/admin')} />
-        ) : (
-          <NavItem to="/profile" icon={Settings} active={location.pathname === '/profile'} />
-        )}
-      </div>
-    </div>
-  );
-};
+  // --- VIEW HISTORY STATE FOR BADGES (PER USER PERSISTENCE) ---
+  
+  // 1. Define default logic (Past date so content appears new for fresh users)
+  const getDefaultHistory = () => ({
+    wall: Date.now() - (24 * 60 * 60 * 1000), 
+    community: Date.now() - (24 * 60 * 60 * 1000),
+    agenda: Date.now() - (24 * 60 * 60 * 1000),
+    repertoire: Date.now() - (48 * 60 * 60 * 1000),
+    finances: Date.now() - (24 * 60 * 60 * 1000),
+    admin: Date.now() - (24 * 60 * 60 * 1000),
+    profile: Date.now()
+  });
 
-const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser } = useApp();
+  // 2. Initialize State loading from localStorage if User is present
+  const [viewHistory, setViewHistory] = useState(getDefaultHistory());
 
-  if (!currentUser) return <>{children}</>;
+  // 3. Effect: When User changes, load THEIR history from storage
+  useEffect(() => {
+    if (currentUser) {
+        const storageKey = `bandSocial_viewHistory_${currentUser.id}`;
+        const savedHistory = localStorage.getItem(storageKey);
+        
+        if (savedHistory) {
+            try {
+                setViewHistory(JSON.parse(savedHistory));
+            } catch (e) {
+                console.error("Failed to parse history", e);
+                setViewHistory(getDefaultHistory());
+            }
+        } else {
+            // New user on this device -> default state
+            const def = getDefaultHistory();
+            setViewHistory(def);
+            localStorage.setItem(storageKey, JSON.stringify(def));
+        }
+    }
+  }, [currentUser?.id]);
+
+  // 4. Effect: When Route changes, update State AND LocalStorage for current user
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const now = Date.now();
+    let updatedHistory = { ...viewHistory };
+    let changed = false;
+
+    if (location.pathname === '/wall') { updatedHistory.wall = now; changed = true; }
+    if (location.pathname === '/people') { updatedHistory.community = now; changed = true; }
+    if (location.pathname === '/agenda') { updatedHistory.agenda = now; changed = true; }
+    if (location.pathname === '/repertoire') { updatedHistory.repertoire = now; changed = true; }
+    if (location.pathname === '/finances') { updatedHistory.finances = now; changed = true; }
+    if (location.pathname === '/admin') { updatedHistory.admin = now; changed = true; }
+    if (location.pathname === '/profile') { updatedHistory.profile = now; changed = true; }
+
+    if (changed) {
+        setViewHistory(updatedHistory);
+        localStorage.setItem(`bandSocial_viewHistory_${currentUser.id}`, JSON.stringify(updatedHistory));
+    }
+  }, [location.pathname, currentUser]); // Depend on currentUser to ensure we write to correct key
+
+  if (!currentUser) {
+    return <AuthScreen onLogin={setCurrentUser} />;
+  }
+
   const isManager = currentUser.role !== UserRole.MEMBER;
 
-  return (
-    <div className="min-h-screen bg-navy-950 text-bege-100 font-sans selection:bg-ocre-500/30 pb-24 md:pb-28">
-      {/* Removed Top Header to give more focus to content, except for branding in specific pages if needed. 
-          Actually keeping a minimal one for profile access */}
-      <header className="fixed top-0 left-0 right-0 h-16 pointer-events-none z-40 px-4 md:px-8 flex items-center justify-between">
-         {/* Branding is now inside pages mostly, but we keep profile shortcut */}
-         <div />
-         <Link to="/profile" className="pointer-events-auto mt-4 bg-navy-900/80 backdrop-blur border border-white/10 p-1 pr-3 rounded-full flex items-center gap-2 shadow-lg hover:scale-105 transition-transform">
-            <div className="w-8 h-8 rounded-full bg-ocre-600 flex items-center justify-center font-bold text-white text-xs">
-              {currentUser.name.charAt(0)}
-            </div>
-            <span className="text-xs font-bold text-bege-50 hidden md:block">{currentUser.name.split(' ')[0]}</span>
-         </Link>
-      </header>
-
-      <main className="pt-8 px-4 md:px-8 max-w-7xl mx-auto transition-all duration-300">
-         {children}
-      </main>
-      <FloatingNavigation isManager={isManager} />
-    </div>
-  );
-};
-
-// --- Updated Admin Dashboard with Strict RBAC ---
-
-const AdminDashboard = () => {
-  const { currentUser, trashBin, users, newsSources, addNewsSource, addEvent, markAttendance, events, deleteItem, restoreItem } = useApp();
-  const [newsUrl, setNewsUrl] = useState('');
-  const [newsName, setNewsName] = useState('');
-  const [promoteModal, setPromoteModal] = useState<User | null>(null);
-
-  // Quick Agenda State
-  const [quickEventTitle, setQuickEventTitle] = useState('');
-  const [quickEventDate, setQuickEventDate] = useState('');
-  const [quickEventType, setQuickEventType] = useState('GROUP'); // Group vs Individual
-
-  const location = useLocation();
-  const showTrash = location.hash.includes('trash');
-
-  if (!currentUser) return <div>Acesso Negado</div>;
-
-  // --- MEMBER VIEW WIDGET (VISIBLE TO ALL) ---
-  const memberStatsWidget = (
-     <div className="bg-navy-900 rounded-xl p-6 shadow-xl border border-navy-700 col-span-full md:col-span-1">
-         <div className="flex justify-between items-start mb-4">
-             <div>
-                 <h3 className="font-bold text-lg text-bege-50">Minha Performance</h3>
-                 <p className="text-xs text-bege-200">Visão de Membro</p>
-             </div>
-             <div className="text-right">
-                 <p className="text-2xl font-serif text-ocre-500 font-bold">{currentUser.xp} XP</p>
-                 <p className="text-xs text-bege-200/50 uppercase">Nível {currentUser.level}</p>
-             </div>
-         </div>
-         <div className="w-full bg-navy-950 h-2 rounded-full overflow-hidden mb-4">
-             <div className="bg-ocre-600 h-full" style={{ width: `${(currentUser.xp % 1000) / 10}%` }}></div>
-         </div>
-         <div className="flex justify-between items-center text-sm">
-             <span className="text-bege-200">Frequência: <strong className="text-green-400">{currentUser.attendanceRate}%</strong></span>
-             <Link to="/profile" className="text-xs font-bold text-blue-400 hover:text-blue-300">Ver Perfil Completo</Link>
-         </div>
-     </div>
-  );
-
-  // --- STRICT RBAC CHECKS ---
-  const isGeneralManager = currentUser.role === UserRole.GENERAL_MANAGER;
-
-  const isAgendaManager = isGeneralManager || 
-                          currentUser.role === UserRole.AGENDA_MANAGER_1 || 
-                          currentUser.role === UserRole.AGENDA_MANAGER_2;
-
-  const isWallManager = isGeneralManager || 
-                        currentUser.role === UserRole.WALL_MANAGER_1 || 
-                        currentUser.role === UserRole.WALL_MANAGER_2;
-
-  const isPeopleManager = isGeneralManager || 
-                          currentUser.role === UserRole.PEOPLE_MANAGER_1 || 
-                          currentUser.role === UserRole.PEOPLE_MANAGER_2;
-
-  const handleAddSource = () => {
-      if(newsUrl && newsName) {
-          addNewsSource({ name: newsName, url: newsUrl });
-          setNewsName('');
-          setNewsUrl('');
-      }
-  };
-
-  const handleQuickEvent = () => {
-      if(quickEventTitle && quickEventDate) {
-          addEvent({
-              title: quickEventTitle,
-              date: new Date(quickEventDate).getTime(),
-              timeStr: '19:00', // Default
-              durationMinutes: 120,
-              eventType: EventType.REHEARSAL, // Default
-              rsvpDeadline: Date.now() + 86400000,
-              location: 'Sede',
-              givesXp: true,
-              attendees: []
-          });
-          setQuickEventTitle('');
-          setQuickEventDate('');
-          alert('Evento Criado!');
-      }
-  };
-
-  return (
-    <div className="pb-24">
-      <header className="mb-6 flex justify-between items-center bg-navy-900 p-4 rounded-xl border border-navy-700">
-         <h1 className="text-xl font-bold text-bege-50">
-             Painel Administrativo
-             <span className="block text-xs font-normal text-bege-200 mt-1 uppercase tracking-wider">{currentUser.role.replace(/_/g, ' ')}</span>
-         </h1>
-         {isGeneralManager && (
-            <div className="flex gap-2">
-                <Link to="/admin#trash" className="text-xs bg-navy-800 px-3 py-1.5 rounded border border-navy-600 hover:border-ocre-500 text-bege-100">
-                Lixeira ({trashBin.length})
-                </Link>
-            </div>
-         )}
-      </header>
-
-      {showTrash && isGeneralManager ? (
-          <TrashBin items={trashBin} userRole={currentUser.role} onRestore={restoreItem} />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {memberStatsWidget}
-
-            {/* WIDGET 1: GESTÃO DE CARGOS (Checklist Style) - ONLY GM */}
-            {isGeneralManager && (
-                <div className="bg-white rounded-xl p-6 shadow-xl text-navy-900 overflow-hidden">
-                    <div className="flex justify-between items-center mb-4 border-b pb-2 border-gray-100">
-                        <h3 className="font-bold text-lg">Gestão de Cargos <span className="text-xs font-normal text-gray-400">(Apenas Gestor Geral)</span></h3>
-                    </div>
-                    <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar">
-                        {users.map(u => (
-                            <div key={u.id} className="flex items-center justify-between group">
-                                <div className="flex items-center gap-3">
-                                    <button 
-                                    onClick={() => setPromoteModal(u)}
-                                    className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${u.role !== UserRole.MEMBER ? 'bg-ocre-500 border-ocre-500' : 'border-gray-300 hover:border-ocre-500'}`}
-                                    >
-                                        {u.role !== UserRole.MEMBER && <CheckSquare className="w-3 h-3 text-white" />}
-                                    </button>
-                                    <div>
-                                        <p className="text-sm font-bold text-navy-800">{u.name}</p>
-                                        <p className="text-xs text-gray-400">{u.role.replace(/_/g, ' ')}</p>
-                                    </div>
-                                </div>
-                                <button className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                                    Editar
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                    {/* Mock Modal for Confirmation */}
-                    {promoteModal && (
-                        <div className="absolute inset-0 bg-white/90 flex items-center justify-center p-6 text-center animate-fade-in z-10">
-                            <div>
-                                <h4 className="font-bold text-lg mb-2">Promover {promoteModal.name}?</h4>
-                                <p className="text-sm text-gray-500 mb-4">Tem certeza que irá promover este usuário?</p>
-                                <div className="flex gap-2 justify-center">
-                                    <button onClick={() => setPromoteModal(null)} className="px-4 py-2 bg-gray-200 rounded text-sm font-bold">Cancelar</button>
-                                    <button onClick={() => setPromoteModal(null)} className="px-4 py-2 bg-ocre-500 text-white rounded text-sm font-bold">Confirmar</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* WIDGET 2: FONTES DE NOTÍCIAS (Input List) - WALL MANAGER & GM */}
-            {isWallManager && (
-                <div className="bg-white rounded-xl p-6 shadow-xl text-navy-900">
-                    <h3 className="font-bold text-lg mb-4 border-b pb-2 border-gray-100">Fontes de Notícias por IA <span className="text-xs font-normal text-gray-400">(Mural)</span></h3>
-                    
-                    <div className="flex gap-2 mb-4">
-                        <input 
-                            value={newsName} onChange={e => setNewsName(e.target.value)}
-                            placeholder="Nome da Fonte" 
-                            className="flex-1 bg-gray-50 border border-gray-200 p-2 rounded text-sm outline-none focus:border-ocre-500"
-                        />
-                        <button onClick={handleAddSource} className="bg-ocre-500 text-white px-3 rounded font-bold text-xs uppercase">Cadastrar</button>
-                    </div>
-                    <input 
-                        value={newsUrl} onChange={e => setNewsUrl(e.target.value)}
-                        placeholder="Link do Site/Perfil (ex: instagram.com/banda)" 
-                        className="w-full bg-gray-50 border border-gray-200 p-2 rounded text-sm mb-4 outline-none focus:border-ocre-500"
-                    />
-
-                    <div className="space-y-2">
-                        <div className="grid grid-cols-4 text-xs font-bold text-gray-400 uppercase">
-                            <span className="col-span-2">Nome</span>
-                            <span>Status</span>
-                            <span className="text-right">Ação</span>
-                        </div>
-                        {newsSources.map(src => (
-                            <div key={src.id} className="grid grid-cols-4 text-sm items-center py-2 border-b border-gray-50">
-                                <span className="col-span-2 font-bold text-navy-700">{src.name}</span>
-                                <span className="text-green-500 text-xs font-bold uppercase">{src.status === 'ACTIVE' ? 'Ativa' : 'Pausada'}</span>
-                                <div className="text-right">
-                                    <button className="text-xs text-red-400 hover:text-red-600 font-bold">Pausar</button>
-                                </div>
-                            </div>
-                        ))}
-                        {newsSources.length === 0 && <p className="text-xs text-gray-400 italic text-center py-2">Nenhuma fonte cadastrada.</p>}
-                    </div>
-                </div>
-            )}
-
-            {/* WIDGET 3: CRIAR AGENDA (Mini Form) - AGENDA MANAGER & GM */}
-            {isAgendaManager && (
-                <div className="bg-white rounded-xl p-6 shadow-xl text-navy-900 relative">
-                    <h3 className="font-bold text-lg mb-4">Criar Agenda <span className="text-xs font-normal text-gray-400">(Rápido)</span></h3>
-                    
-                    <div className="space-y-3">
-                        <div>
-                            <label className="text-xs font-bold text-gray-400">Título de Evento</label>
-                            <input 
-                                value={quickEventTitle} onChange={e => setQuickEventTitle(e.target.value)}
-                                className="w-full border-b border-gray-200 py-1 text-sm font-bold focus:border-ocre-500 outline-none text-navy-800"
-                                placeholder="Ensaio..."
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <div className="flex-1">
-                                <label className="text-xs font-bold text-gray-400">Data</label>
-                                <input type="date" value={quickEventDate} onChange={e => setQuickEventDate(e.target.value)} className="w-full border-b border-gray-200 py-1 text-sm" />
-                            </div>
-                            <div className="flex-1">
-                                <label className="text-xs font-bold text-gray-400">Hora</label>
-                                <div className="py-1 text-sm border-b border-gray-200 text-gray-500">19:00 (Padrão)</div>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label className="text-xs font-bold text-gray-400 mb-1 block">Tipo de Estudo</label>
-                            <div className="flex gap-2">
-                                <button 
-                                onClick={() => setQuickEventType('GROUP')}
-                                className={`flex-1 py-1 rounded border text-xs font-bold ${quickEventType === 'GROUP' ? 'bg-navy-800 text-white border-navy-800' : 'bg-white border-gray-200 text-gray-500'}`}
-                                >
-                                    Em Grupo
-                                </button>
-                                <button 
-                                onClick={() => setQuickEventType('INDIVIDUAL')}
-                                className={`flex-1 py-1 rounded border text-xs font-bold ${quickEventType === 'INDIVIDUAL' ? 'bg-navy-800 text-white border-navy-800' : 'bg-white border-gray-200 text-gray-500'}`}
-                                >
-                                    Individual
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="pt-2">
-                            <div className="border border-dashed border-gray-300 rounded p-2 flex items-center gap-2 text-gray-400 cursor-pointer hover:bg-gray-50">
-                                <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center"><MapPin className="w-4 h-4"/></div>
-                                <span className="text-xs">Buscar no Mapa Satélite</span>
-                            </div>
-                        </div>
-
-                        <button onClick={handleQuickEvent} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded font-bold shadow-lg mt-2">
-                            Cria Evento
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* WIDGET 4: LISTA DE PRESENÇA (Quick View) - PEOPLE MANAGER & GM */}
-            {isPeopleManager && (
-                <div className="bg-white rounded-xl p-6 shadow-xl text-navy-900">
-                    <h3 className="font-bold text-lg mb-4">Lista de Presença <span className="text-xs font-normal text-gray-400">(Pessoas)</span></h3>
-                    
-                    <div className="space-y-2">
-                        {users.slice(0, 5).map(u => (
-                            <div key={u.id} className="flex items-center justify-between border-b border-gray-50 pb-2">
-                                <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 border rounded ${Math.random() > 0.5 ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
-                                        {Math.random() > 0.5 && <Check className="w-3 h-3 text-white" />}
-                                    </div>
-                                    <span className="text-sm text-navy-700">{u.name}</span>
-                                </div>
-                                <div className="flex gap-1">
-                                    <div className="w-4 h-4 rounded border border-gray-200"></div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    
-                    <div className="mt-4 flex justify-between items-center">
-                        <span className="text-xs text-gray-400">Exportar PDF</span>
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold">Salvar Presença</button>
-                    </div>
-                </div>
-            )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const MainApp = () => {
-  const { currentUser, setCurrentUser, users, repertoire, posts, finances, events, deleteItem, addRepertoire, addPost, votePoll, toggleFinanceApproval, addEvent, handleEventAction, markAttendance, toggleFollow } = useApp();
-  const navigate = useNavigate();
-
-  const handleStudyPost = (content: string, videoBlob: Blob, visibility: 'PUBLIC' | 'FOLLOWERS', location?: any) => {
+  const handleStudioPost = (content: string, videoBlob: Blob, visibility: 'PUBLIC' | 'FOLLOWERS', location?: LocationData) => {
     const videoUrl = URL.createObjectURL(videoBlob);
     addPost({
-      title: 'Sessão de Estudo',
-      postType: 'TEXT',
+      title: 'Sessão de Estúdio',
       content,
       videoUrl,
       visibility,
-      location
+      location,
+      postType: 'TEXT',
+      category: 'COMMUNITY', // Force Community category
+      mediaUrls: []
     });
-    navigate('/community');
   };
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user);
-  };
+  // --- NOTIFICATION BADGE LOGIC (Based on Last Visit) ---
+  
+  // Mural: New official posts (no reposts/confirmation spam) created AFTER last visit
+  const hasWallUpdates = posts.some(p => 
+      p.type === 'POST' && 
+      p.category === 'WALL' &&
+      !p.originalPostId && 
+      !p.title?.startsWith("Presença confirmada") &&
+      p.createdAt > viewHistory.wall
+  );
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    navigate('/');
-  };
+  // Community: New interactions created AFTER last visit
+  const hasCommunityUpdates = posts.some(p => 
+     p.type === 'POST' && 
+     p.category === 'COMMUNITY' &&
+     p.createdAt > viewHistory.community
+  );
 
-  if (!currentUser) {
-    return <AuthScreen onLogin={handleLogin} />;
-  }
+  // Agenda: New Events created AFTER last visit (regardless of RSVP, simply "New Event Available")
+  const hasPendingEvents = events.some(e => {
+      // Logic: Show badge if event was created AFTER I last visited the agenda tab.
+      return e.createdAt > viewHistory.agenda;
+  });
+
+  // Repertoire: Recently added items AFTER last visit
+  const hasNewRepertoire = repertoire.some(r => r.createdAt > viewHistory.repertoire);
+
+  // Finances: Pending items created AFTER last visit
+  const hasPendingFinances = finances.some(f => f.status === 'PENDING' && f.createdAt > viewHistory.finances);
+
+  // Admin/Profile
+  const hasAdminAlerts = isManager && finances.some(f => f.status === 'PENDING' && f.createdAt > viewHistory.admin);
 
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Wall currentUser={currentUser} posts={posts} events={events} onAddPost={addPost} onVote={votePoll} onDelete={deleteItem} />} />
-        <Route path="/community" element={<Community posts={posts} currentUser={currentUser} allUsers={users} onToggleFollow={toggleFollow} onAddPost={addPost} />} />
-        <Route path="/tools" element={<StudyStudio currentUser={currentUser} onPost={handleStudyPost} />} />
-        <Route 
-          path="/agenda" 
-          element={
-            <Agenda 
-              events={events} 
+    <div className="min-h-screen bg-navy-900 text-bege-100 font-sans pb-20 relative">
+      
+      {/* --- PROACTIVE PERMISSION BANNER --- */}
+      {notificationPermission === 'default' && (
+         <div className="fixed top-20 left-4 right-4 z-[60] animate-bounce-in">
+             <div className="bg-navy-800 border-l-4 border-ocre-500 rounded-r-lg shadow-2xl p-4 flex items-start justify-between gap-4">
+                 <div className="flex-1">
+                     <h4 className="font-bold text-bege-50 text-sm flex items-center gap-2">
+                        <BellRing className="w-4 h-4 text-ocre-500" /> Ativar Notificações?
+                     </h4>
+                     <p className="text-xs text-bege-200 mt-1">
+                        Receba alertas em tempo real quando gestores postarem novidades ou eventos.
+                     </p>
+                 </div>
+                 <div className="flex flex-col gap-2">
+                     <button 
+                        onClick={requestNotificationPermission}
+                        className="bg-ocre-600 hover:bg-ocre-500 text-white text-xs font-bold px-3 py-2 rounded shadow transition-colors"
+                     >
+                        Permitir
+                     </button>
+                     <button 
+                        onClick={() => { /* Simple dismiss, keeps it 'default' but hides visually for session? Or better, sets 'denied' conceptually in local state? For now, standard behavior */}}
+                        className="text-xs text-gray-500 hover:text-white"
+                     >
+                        Agora não
+                     </button>
+                 </div>
+             </div>
+         </div>
+      )}
+
+      {/* Mobile-First Header */}
+      <header className="sticky top-0 z-40 bg-navy-900/90 backdrop-blur-md border-b border-navy-700 px-4 py-3 flex justify-between items-center shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-ocre-600 rounded-xl flex items-center justify-center shadow-lg shadow-ocre-900/50">
+            <Users className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="font-serif font-bold text-lg leading-none text-bege-50">BandSocial</h1>
+            <p className="text-[10px] uppercase tracking-widest text-ocre-500 font-bold">Manager</p>
+          </div>
+        </div>
+        
+        <Link to="/profile" className="flex items-center gap-2 bg-navy-800 pr-3 pl-1 py-1 rounded-full border border-navy-700 hover:border-ocre-500 transition-colors relative">
+          <div className="w-8 h-8 rounded-full bg-navy-700 flex items-center justify-center text-xs font-bold text-bege-100">
+            {currentUser.name.charAt(0)}
+          </div>
+          <div className="text-right hidden sm:block">
+            <p className="text-[10px] font-bold text-bege-50 leading-none">{currentUser.name.split(' ')[0]}</p>
+            <p className="text-[8px] text-ocre-500 font-bold uppercase">{currentUser.role.split('_')[0]}</p>
+          </div>
+          {/* Profile Badge (Mini) */}
+          {hasAdminAlerts && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>}
+        </Link>
+      </header>
+
+      <main className="p-4 md:p-6 max-w-7xl mx-auto">
+        <Routes>
+          <Route path="/" element={<Navigate to="/wall" replace />} />
+          <Route path="/wall" element={
+            <Wall 
               currentUser={currentUser} 
-              onAddEvent={addEvent} 
-              onEventAction={handleEventAction}
-              onMarkAttendance={markAttendance}
-              onDelete={deleteItem}
               allUsers={users}
+              posts={useApp().posts} 
+              events={useApp().events}
+              onAddPost={useApp().addPost} 
+              onVote={useApp().votePoll} 
+              onDelete={useApp().deleteItem}
             />
-          } 
-        />
-        <Route 
-          path="/repertoire" 
-          element={
-            <Repertoire 
-              items={repertoire} 
+          } />
+          <Route path="/people" element={
+             <Community 
+               posts={useApp().posts} 
+               currentUser={currentUser} 
+               allUsers={users} 
+               onToggleFollow={useApp().toggleFollow}
+               onAddPost={useApp().addPost}
+             />
+          } />
+          <Route path="/agenda" element={
+            <Agenda 
+              events={useApp().events} 
               currentUser={currentUser} 
-              onDelete={deleteItem}
-              onAdd={addRepertoire}
+              allUsers={users}
+              onAddEvent={useApp().addEvent}
+              onEventAction={useApp().handleEventAction}
+              onMarkAttendance={useApp().markAttendance}
+              onDelete={useApp().deleteItem}
+              onAddPost={useApp().addPost}
             />
-          } 
-        />
-        <Route 
-          path="/finances" 
-          element={
-            <Finances 
-              items={finances} 
-              onToggleApproval={toggleFinanceApproval} 
+          } />
+          <Route path="/repertoire" element={
+            <Repertoire 
+              items={useApp().repertoire} 
+              currentUser={currentUser} 
+              onDelete={useApp().deleteItem} 
+              onAdd={useApp().addRepertoire}
             />
-          } 
-        />
-        <Route path="/profile" element={<Profile user={currentUser} onLogout={handleLogout} />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-      </Routes>
-    </Layout>
+          } />
+          <Route path="/finances" element={<Finances items={useApp().finances} onToggleApproval={useApp().toggleFinanceApproval} />} />
+          <Route path="/admin" element={
+             <AdminPanel 
+                currentUser={currentUser} 
+                allUsers={useApp().users} 
+                newsSources={useApp().newsSources}
+                events={useApp().events}
+                onAddNewsSource={useApp().addNewsSource}
+                onMarkAttendance={useApp().markAttendance}
+             />
+          } />
+          <Route path="/profile" element={
+            <div className="space-y-8">
+               <Profile user={currentUser} onLogout={() => setCurrentUser(null)} />
+               {/* Trash Bin embedded in Profile for Managers */}
+               {currentUser.role === UserRole.GENERAL_MANAGER && (
+                  <TrashBin 
+                    items={useApp().trashBin} 
+                    userRole={currentUser.role} 
+                    onRestore={useApp().restoreItem} 
+                  />
+               )}
+            </div>
+          } />
+          <Route path="/studio" element={<StudyStudio currentUser={currentUser} onPost={handleStudioPost} />} />
+        </Routes>
+      </main>
+
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-navy-900/95 backdrop-blur-lg border-t border-navy-800 pb-safe z-50">
+        <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
+          <NavLink to="/wall" icon={<LayoutDashboard />} label="Mural" hasNotification={hasWallUpdates} />
+          <NavLink to="/people" icon={<Users />} label="Galera" hasNotification={hasCommunityUpdates} />
+          <NavLink to="/agenda" icon={<Calendar />} label="Agenda" hasNotification={hasPendingEvents} />
+          
+          <div className="relative -top-5">
+             <Link to="/studio" className="w-14 h-14 bg-ocre-600 rounded-full flex items-center justify-center text-white shadow-xl shadow-ocre-900/40 border-4 border-navy-900 transform transition-transform active:scale-95 hover:bg-ocre-500">
+                <Video className="w-6 h-6" />
+             </Link>
+          </div>
+
+          <NavLink to="/repertoire" icon={<LibraryBig />} label="Arquivo" hasNotification={hasNewRepertoire} />
+          <NavLink to="/finances" icon={<Landmark />} label="Caixa" hasNotification={hasPendingFinances} />
+          
+          {/* Admin Link for General Manager OR People Managers */}
+          {[UserRole.GENERAL_MANAGER, UserRole.PEOPLE_MANAGER_1, UserRole.PEOPLE_MANAGER_2].includes(currentUser.role) ? (
+             <NavLink to="/admin" icon={<ShieldAlert />} label="Admin" activeColor="text-red-500" hasNotification={hasAdminAlerts} />
+          ) : (
+             <NavLink to="/profile" icon={<Settings />} label="Perfil" hasNotification={hasAdminAlerts} />
+          )}
+        </div>
+      </nav>
+
+    </div>
+  );
+};
+
+const NavLink = ({ to, icon, label, activeColor = 'text-ocre-500', hasNotification = false }: { to: string, icon: React.ReactNode, label: string, activeColor?: string, hasNotification?: boolean }) => {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+  
+  return (
+    <Link to={to} className={`flex flex-col items-center justify-center w-14 gap-1 transition-colors relative ${isActive ? activeColor : 'text-navy-400 hover:text-bege-200'}`}>
+      <div className="relative">
+        {React.cloneElement(icon as React.ReactElement<any>, { size: 20, strokeWidth: isActive ? 2.5 : 2 })}
+        {hasNotification && (
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-navy-900 animate-pulse"></span>
+        )}
+      </div>
+      <span className={`text-[9px] font-bold ${isActive ? 'opacity-100' : 'opacity-60'}`}>{label}</span>
+    </Link>
   );
 };
 
 export default function App() {
   return (
-    <AppProvider>
-      <HashRouter>
+    <HashRouter>
+      <AppProvider>
         <MainApp />
-      </HashRouter>
-    </AppProvider>
+      </AppProvider>
+    </HashRouter>
   );
 }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { EventItem, EventType, User, UserRole, AttendanceStatus, AttendanceRecord, LocationData, RepertoireCategory } from '../types';
-import { Calendar, Clock, MapPin, Plus, Music, Star, BookOpen, Bus, Hammer, AlertCircle, Check, X, Printer, Link as LinkIcon, Users, AlertTriangle, UserCheck, User as UserIcon, Wand2, GraduationCap, ArrowRight, Zap, PartyPopper } from 'lucide-react';
+import { Calendar, Clock, MapPin, Plus, Music, Star, BookOpen, Bus, Hammer, AlertCircle, Check, X, Printer, Link as LinkIcon, Users, AlertTriangle, UserCheck, User as UserIcon, Wand2, GraduationCap, ArrowRight, Zap, PartyPopper, Heart, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useApp } from '../App'; 
 import { LocationPicker } from './LocationPicker';
 import { XP_MATRIX } from '../constants';
@@ -12,16 +12,23 @@ interface Props {
   currentUser: User;
   allUsers: User[];
   onAddEvent: (event: any) => void;
-  onEventAction: (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL') => void;
+  onEventAction: (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL' | 'DECLINE', reason?: string) => void;
   onMarkAttendance: (eventId: string, userId: string, status: AttendanceStatus.PRESENT | AttendanceStatus.ABSENT) => void;
   onDelete?: (id: string, reason: string) => void;
+  onAddPost: (post: any) => void;
 }
 
-export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEvent, onEventAction, onMarkAttendance, onDelete }) => {
+export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEvent, onEventAction, onMarkAttendance, onDelete, onAddPost }) => {
   const { repertoire } = useApp(); 
   const location = useLocation();
   const [showModal, setShowModal] = useState(false);
   const [printEvent, setPrintEvent] = useState<EventItem | null>(null);
+
+  // Cancellation Modal State
+  const [cancelModalEvent, setCancelModalEvent] = useState<EventItem | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [familyMember, setFamilyMember] = useState<string>('');
+  const [otherReasonDetail, setOtherReasonDetail] = useState<string>('');
 
   // XP Notification State
   const [xpToast, setXpToast] = useState<{ show: boolean, amount: number, message: string } | null>(null);
@@ -90,14 +97,69 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
       setXpToast({ show: true, amount, message });
   };
 
+  // --- CONFIRMATION HANDLER ---
+  const handleConfirmEvent = (event: EventItem) => {
+    onEventAction(event.id, currentUser.id, 'CONFIRM');
+    
+    // Auto Post to Community (Followers Only)
+    // Ensures event name is explicit in the title as per requirement
+    onAddPost({
+        title: `Presença confirmada em: ${event.title}`,
+        content: `Eu vou! Acabei de confirmar presença. Vamos nessa? 🎺🎵`,
+        postType: 'TEXT',
+        category: 'COMMUNITY', // Force Community category
+        visibility: 'FOLLOWERS',
+        mediaUrls: [],
+    });
+
+    // Notify User
+    triggerXpToast(XP_MATRIX[event.eventType]?.confirm || 0, "Presença Confirmada! Post motivational criado.");
+  };
+
+  const handleDeclineEvent = (event: EventItem) => {
+    onEventAction(event.id, currentUser.id, 'DECLINE');
+    triggerXpToast(0, "Que pena! Esperamos você na próxima. 😢");
+  };
+
+  // --- CANCELLATION HANDLER ---
+  const openCancelModal = (event: EventItem) => {
+      setCancelModalEvent(event);
+      setCancelReason('');
+      setFamilyMember('');
+      setOtherReasonDetail('');
+  };
+
+  const submitCancellation = () => {
+      if (!cancelModalEvent) return;
+      if (!cancelReason) return alert("Selecione um motivo.");
+      
+      let finalReason = cancelReason;
+      if (cancelReason === 'Doença na Família' && familyMember) {
+          finalReason = `Doença na Família (${familyMember})`;
+      } else if (cancelReason === 'Outros' && otherReasonDetail) {
+          finalReason = `Outros: ${otherReasonDetail}`;
+      }
+
+      onEventAction(cancelModalEvent.id, currentUser.id, 'CANCEL', finalReason);
+      
+      // Calculate XP Loss for Toast
+      const isLate = Date.now() > cancelModalEvent.rsvpDeadline;
+      const xpValues = XP_MATRIX[cancelModalEvent.eventType];
+      const loss = isLate ? -((xpValues?.confirm || 0)*2) : -(xpValues?.confirm || 0);
+
+      triggerXpToast(loss, "Inscrição Cancelada");
+      setCancelModalEvent(null);
+  };
+
+
   const handleSubmit = () => {
     if (!title || !date || !time || !deadlineDate) return alert("Por favor preencha todos os campos.");
 
     const givesXp = [
         EventType.REHEARSAL, 
         EventType.PERFORMANCE, 
-        EventType.STUDY,
-        EventType.WORKSHOP,
+        EventType.STUDY, 
+        EventType.WORKSHOP, 
         EventType.TRAVEL,
         EventType.SOCIAL
     ].includes(selectedType);
@@ -245,13 +307,23 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
       {/* XP Toast Notification */}
       {xpToast && (
           <div className="fixed top-20 right-4 md:right-8 z-[80] animate-bounce-in">
-              <div className={`flex items-center gap-3 p-4 rounded-xl shadow-2xl border-2 ${xpToast.amount > 0 ? 'bg-navy-900 border-green-500' : 'bg-red-900 border-red-500'}`}>
-                  <div className={`p-2 rounded-full ${xpToast.amount > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                      <Zap className="w-6 h-6 fill-current" />
+              <div className={`flex items-center gap-3 p-4 rounded-xl shadow-2xl border-2 ${
+                  xpToast.amount > 0 ? 'bg-navy-900 border-green-500' : 
+                  xpToast.amount < 0 ? 'bg-red-900 border-red-500' :
+                  'bg-navy-800 border-gray-500'
+              }`}>
+                  <div className={`p-2 rounded-full ${
+                      xpToast.amount > 0 ? 'bg-green-500 text-white' : 
+                      xpToast.amount < 0 ? 'bg-red-500 text-white' :
+                      'bg-gray-600 text-white'
+                  }`}>
+                      {xpToast.amount === 0 ? <Heart className="w-6 h-6 fill-current text-gray-300" /> : <Zap className="w-6 h-6 fill-current" />}
                   </div>
                   <div>
-                      <h4 className="font-black text-lg text-bege-50">{xpToast.amount > 0 ? `+${xpToast.amount}` : xpToast.amount} XP</h4>
-                      <p className="text-xs font-bold text-bege-200 uppercase">{xpToast.message}</p>
+                      {xpToast.amount !== 0 && (
+                         <h4 className="font-black text-lg text-bege-50">{xpToast.amount > 0 ? `+${xpToast.amount}` : xpToast.amount} XP</h4>
+                      )}
+                      <p className={`text-xs font-bold text-bege-200 uppercase ${xpToast.amount === 0 ? 'text-sm' : ''}`}>{xpToast.message}</p>
                   </div>
               </div>
           </div>
@@ -283,9 +355,28 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                     </tr>
                 </thead>
                 <tbody>
-                    {Array.from({ length: 25 }).map((_, i) => (
-                        <tr key={i}>
-                            <td className="border border-black p-1 text-center">{i + 1}</td>
+                    {/* Filter out DECLINED users from printed list as well */}
+                    {printEvent.attendees.filter(a => a.status !== AttendanceStatus.DECLINED).map((att, i) => {
+                        const user = allUsers.find(u => u.id === att.userId);
+                        return (
+                            <tr key={att.userId}>
+                                <td className="border border-black p-1 text-center">{i + 1}</td>
+                                <td className="border border-black p-1">{user?.name}</td>
+                                <td className="border border-black p-1">{user?.instrument}</td>
+                                {([EventType.PERFORMANCE, EventType.TRAVEL].includes(printEvent.eventType)) && (
+                                <>
+                                    <td className="border border-black p-1"></td>
+                                    <td className="border border-black p-1"></td>
+                                </>
+                                )}
+                                <td className="border border-black p-1"></td>
+                            </tr>
+                        );
+                    })}
+                    {/* Fill remaining rows to reach 25 or at least some empty rows */}
+                    {Array.from({ length: Math.max(0, 25 - printEvent.attendees.filter(a => a.status !== AttendanceStatus.DECLINED).length) }).map((_, i) => (
+                        <tr key={`empty-${i}`}>
+                            <td className="border border-black p-1 text-center">{i + 1 + printEvent.attendees.filter(a => a.status !== AttendanceStatus.DECLINED).length}</td>
                             <td className="border border-black p-1"></td>
                             <td className="border border-black p-1"></td>
                             {([EventType.PERFORMANCE, EventType.TRAVEL].includes(printEvent.eventType)) && (
@@ -327,33 +418,9 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
           const eventDate = new Date(event.date);
           const locString = renderLocation(event.location);
           const xpValues = XP_MATRIX[event.eventType];
-          const isIndividual = event.title.includes("Prática Individual");
           const isHighlighted = highlightId === event.id;
           
-          // Determine Action Button State & XP Label
-          // If confirmed, user has +20XP.
-          // Canceling late means losing that 20 PLUS another 20 -> Net loss 40 relative to now?
-          // No, UI should show absolute change.
-          // "Vou" -> Adds +20.
-          // "Desistir" (Early) -> Removes 20 (-20).
-          // "Desistir" (Late) -> Removes 20 AND Penalizes 20 (-40 Total from current state).
-          
-          let buttonLabel = `Confirmar (+${xpValues?.confirm} XP)`;
-          let buttonClass = 'bg-navy-800 hover:bg-ocre-600 text-bege-200 hover:text-white border-navy-600';
-
-          if (status === AttendanceStatus.CONFIRMED) {
-              if (isClosed) {
-                  // Late Cancel
-                  buttonLabel = `Vou (Desistir: -${xpValues?.confirm * 2} XP)`;
-              } else {
-                  // Early Cancel
-                  buttonLabel = `Vou (Desistir: -${xpValues?.confirm} XP)`;
-              }
-              buttonClass = 'bg-green-800 hover:bg-red-900/80 text-green-100 hover:text-red-200 border-green-700';
-          } else if (status === AttendanceStatus.LATE_CANCEL) {
-              buttonLabel = 'Cancelado Tardiamente';
-              buttonClass = 'bg-red-900/50 text-red-300 border-red-900 cursor-not-allowed';
-          }
+          const confirmedCount = event.attendees.filter(a => a.status === AttendanceStatus.CONFIRMED || a.status === AttendanceStatus.PRESENT).length;
 
           return (
             <div 
@@ -437,35 +504,73 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                        <div className="text-center p-4 bg-navy-900/50 rounded-lg border border-navy-700">
                            <p className="text-bege-200 font-bold">Evento Iniciado</p>
                            <p className="text-xs text-bege-200/50 mt-1">
-                               {event.attendees.filter(a => a.status === AttendanceStatus.CONFIRMED || a.status === AttendanceStatus.PRESENT).length} confirmados
+                               {confirmedCount} confirmados
                            </p>
                        </div>
                    ) : (
                        <>
                         <div className="text-right mb-2">
                             <span className="text-xs text-bege-200">
-                                {event.attendees.filter(a => a.status === AttendanceStatus.CONFIRMED).length} confirmados
+                                {confirmedCount} confirmados
                             </span>
                         </div>
-                        <button 
-                            disabled={status === AttendanceStatus.LATE_CANCEL}
-                            onClick={() => {
-                                const action = status === AttendanceStatus.CONFIRMED ? 'CANCEL' : 'CONFIRM';
-                                if (action === 'CANCEL' && isClosed) {
-                                    if (!window.confirm("ATENÇÃO: Cancelar agora resultará em penalidade de XP (Perda de confirmação + Multa). Deseja continuar?")) {
-                                        return;
-                                    }
-                                }
-                                onEventAction(event.id, currentUser.id, action);
-                                if (action === 'CONFIRM') triggerXpToast(xpValues?.confirm || 0, "Presença Confirmada!");
-                                if (action === 'CANCEL') triggerXpToast(isClosed ? -((xpValues?.confirm || 0)*2) : -(xpValues?.confirm || 0), "Inscrição Cancelada");
-                            }}
-                            className={`w-full py-3 rounded-lg font-bold border transition-all shadow-lg flex items-center justify-center gap-2 ${buttonClass}`}
-                        >
-                            {status === AttendanceStatus.CONFIRMED && <Check className="w-4 h-4" />}
-                            {buttonLabel}
-                        </button>
-                        {isClosed && status !== AttendanceStatus.LATE_CANCEL && (
+                        
+                        {/* Dynamic Button States */}
+                        {status === AttendanceStatus.PENDING && (
+                             <div className="flex gap-2">
+                                 <button 
+                                     onClick={() => handleConfirmEvent(event)}
+                                     className="flex-1 py-3 rounded-lg font-bold bg-navy-800 hover:bg-green-700 hover:text-white border border-navy-600 hover:border-green-600 text-bege-200 transition-all shadow-lg flex items-center justify-center gap-2"
+                                 >
+                                     <ThumbsUp className="w-4 h-4" /> Aceitar
+                                 </button>
+                                 <button 
+                                     onClick={() => handleDeclineEvent(event)}
+                                     className="py-3 px-4 rounded-lg font-bold bg-navy-900 hover:bg-red-900/50 border border-navy-700 hover:border-red-800 text-gray-400 hover:text-red-300 transition-all flex items-center justify-center"
+                                     title="Não irei"
+                                 >
+                                     <ThumbsDown className="w-4 h-4" />
+                                 </button>
+                             </div>
+                        )}
+
+                        {status === AttendanceStatus.CONFIRMED && (
+                             <>
+                                <button 
+                                    onClick={() => openCancelModal(event)}
+                                    className="w-full py-3 rounded-lg font-bold bg-green-800 hover:bg-red-900/80 text-green-100 hover:text-red-200 border border-green-700 hover:border-red-800 transition-all shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    Cancelar Presença
+                                </button>
+                                <p className="text-[10px] text-center mt-2 text-green-400 font-bold flex items-center justify-center gap-1">
+                                    <Heart className="w-3 h-3 fill-current" /> Você confirmou!
+                                </p>
+                             </>
+                        )}
+                        
+                        {status === AttendanceStatus.LATE_CANCEL && (
+                            <button disabled className="w-full py-3 rounded-lg font-bold bg-red-900/50 text-red-300 border border-red-900 cursor-not-allowed flex items-center justify-center gap-2">
+                                <X className="w-4 h-4" /> Cancelado
+                            </button>
+                        )}
+
+                        {status === AttendanceStatus.DECLINED && (
+                            <div className="text-center bg-navy-900/50 p-3 rounded-lg border border-navy-700">
+                                <p className="text-sm text-bege-200 mb-2 font-bold flex items-center justify-center gap-2">
+                                   <ThumbsDown className="w-4 h-4 text-gray-400"/> Não poderei ir
+                                </p>
+                                <p className="text-xs text-gray-500 mb-3 italic">Mudou de ideia?</p>
+                                <button 
+                                    onClick={() => handleConfirmEvent(event)}
+                                    className="w-full py-2 rounded-lg font-bold bg-navy-800 hover:bg-ocre-600 text-bege-200 hover:text-white border border-navy-600 transition-all shadow-lg flex items-center justify-center gap-2 text-xs uppercase tracking-wide"
+                                >
+                                    <ThumbsUp className="w-3 h-3" /> Reconsiderar Presença
+                                </button>
+                            </div>
+                        )}
+
+
+                        {isClosed && status !== AttendanceStatus.LATE_CANCEL && status !== AttendanceStatus.DECLINED && (
                             <p className="text-[10px] text-center mt-2 text-red-400 font-bold flex items-center justify-center gap-1">
                                 <AlertTriangle className="w-3 h-3" /> Prazo Encerrado
                             </p>
@@ -480,29 +585,42 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                   <div className="mt-6 pt-4 border-t border-navy-700">
                       <details className="group">
                           <summary className="cursor-pointer text-xs font-bold text-bege-200 hover:text-white flex items-center gap-2 select-none">
-                              <Users className="w-4 h-4" /> Gerenciar Lista de Presença ({event.attendees.length})
+                              <Users className="w-4 h-4" /> Gerenciar Lista de Presença ({confirmedCount})
                           </summary>
                           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 bg-navy-900/50 p-4 rounded-lg">
-                              {event.attendees.map(record => {
+                              {/* Filter out DECLINED users from the management view to satisfy user requirement */}
+                              {event.attendees
+                                .filter(a => a.status !== AttendanceStatus.DECLINED)
+                                .map(record => {
                                   const user = allUsers.find(u => u.id === record.userId);
                                   if (!user) return null;
                                   return (
                                       <div key={record.userId} className="flex items-center justify-between bg-navy-800 p-2 rounded border border-navy-700">
-                                          <div className="flex items-center gap-2">
-                                              <div className={`w-2 h-2 rounded-full ${record.status === AttendanceStatus.PRESENT ? 'bg-green-500' : record.status === AttendanceStatus.ABSENT ? 'bg-red-500' : 'bg-gray-500'}`}></div>
-                                              <span className="text-xs text-bege-100 truncate w-32">{user.name}</span>
+                                          <div className="flex-1">
+                                              <div className="flex items-center gap-2">
+                                                <div className={`w-2 h-2 rounded-full ${record.status === AttendanceStatus.PRESENT ? 'bg-green-500' : record.status === AttendanceStatus.ABSENT ? 'bg-red-500' : 'bg-gray-500'}`}></div>
+                                                <span className="text-xs text-bege-100 truncate w-32">{user.name}</span>
+                                              </div>
+                                              {record.cancellationReason && (
+                                                  <p className="text-[10px] text-red-300 mt-1 italic pl-4 border-l border-red-900">
+                                                      "{record.cancellationReason}"
+                                                  </p>
+                                              )}
+                                              {record.status === AttendanceStatus.LATE_CANCEL && (
+                                                   <span className="text-[9px] bg-red-900/50 px-1 rounded text-red-300 border border-red-800 ml-4">Cancelado</span>
+                                              )}
                                           </div>
                                           <div className="flex gap-1">
                                               <button 
                                                 onClick={() => onMarkAttendance(event.id, user.id, AttendanceStatus.PRESENT)}
-                                                className={`p-1 rounded ${record.status === AttendanceStatus.PRESENT ? 'bg-green-600 text-white' : 'bg-navy-700 text-gray-400 hover:bg-green-900'}`}
+                                                className={`p-1.5 rounded ${record.status === AttendanceStatus.PRESENT ? 'bg-green-600 text-white' : 'bg-navy-700 text-gray-400 hover:bg-green-900'}`}
                                                 title="Presente"
                                               >
                                                   <Check className="w-3 h-3" />
                                               </button>
                                               <button 
                                                 onClick={() => onMarkAttendance(event.id, user.id, AttendanceStatus.ABSENT)}
-                                                className={`p-1 rounded ${record.status === AttendanceStatus.ABSENT ? 'bg-red-600 text-white' : 'bg-navy-700 text-gray-400 hover:bg-red-900'}`}
+                                                className={`p-1.5 rounded ${record.status === AttendanceStatus.ABSENT ? 'bg-red-600 text-white' : 'bg-navy-700 text-gray-400 hover:bg-red-900'}`}
                                                 title="Falta"
                                               >
                                                   <X className="w-3 h-3" />
@@ -511,7 +629,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                                       </div>
                                   )
                               })}
-                              {event.attendees.length === 0 && <p className="text-xs text-gray-500 col-span-3 text-center">Nenhum inscrito ainda.</p>}
+                              {confirmedCount === 0 && <p className="text-xs text-gray-500 col-span-3 text-center">Nenhum inscrito ativo.</p>}
                           </div>
                       </details>
                   </div>
@@ -520,6 +638,90 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
           );
         })}
       </div>
+
+      {/* CANCELLATION MODAL */}
+      {cancelModalEvent && (
+        <div className="fixed inset-0 bg-navy-950/90 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+            <div className="bg-navy-900 w-full max-w-md rounded-2xl border border-red-900/50 shadow-2xl overflow-hidden animate-fade-in">
+                <div className="p-6">
+                    <h3 className="text-xl font-bold text-bege-50 mb-2">Cancelar Presença</h3>
+                    <p className="text-sm text-bege-200 mb-6">
+                        Entendemos que imprevistos acontecem. Por favor, selecione o motivo do cancelamento para justificar sua ausência.
+                    </p>
+
+                    <div className="space-y-3 mb-6">
+                        {[
+                            'Viagem inesperada de trabalho',
+                            'Doença',
+                            'Doença na Família',
+                            'Falta de condução',
+                            'Outros'
+                        ].map(reason => (
+                            <div key={reason}>
+                                <label className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${cancelReason === reason ? 'bg-red-900/20 border-red-500' : 'bg-navy-800 border-navy-700 hover:border-red-500/50'}`}>
+                                    <input 
+                                        type="radio" 
+                                        name="cancelReason" 
+                                        value={reason} 
+                                        checked={cancelReason === reason} 
+                                        onChange={(e) => setCancelReason(e.target.value)}
+                                        className="w-4 h-4 accent-red-500 mr-3"
+                                    />
+                                    <span className="text-sm text-bege-100">{reason}</span>
+                                </label>
+
+                                {/* Conditional Sub-questions */}
+                                {cancelReason === 'Doença na Família' && reason === 'Doença na Família' && (
+                                    <div className="ml-8 mt-2 p-2 bg-navy-950 rounded border border-navy-800 animate-fade-in">
+                                        <p className="text-xs text-gray-400 mb-2">Quem está doente?</p>
+                                        <select 
+                                            value={familyMember}
+                                            onChange={(e) => setFamilyMember(e.target.value)}
+                                            className="w-full bg-navy-800 text-sm text-bege-100 p-2 rounded border border-navy-700 outline-none focus:border-red-500"
+                                        >
+                                            <option value="">Selecione...</option>
+                                            <option value="Pai">Pai</option>
+                                            <option value="Mãe">Mãe</option>
+                                            <option value="Filho(a)">Filho(a)</option>
+                                            <option value="Cônjuge/Esposa">Cônjuge/Esposa</option>
+                                        </select>
+                                    </div>
+                                )}
+
+                                {cancelReason === 'Outros' && reason === 'Outros' && (
+                                     <div className="ml-8 mt-2 animate-fade-in">
+                                         <textarea 
+                                            placeholder="Descreva o motivo (sujeito à aprovação do gestor)..."
+                                            value={otherReasonDetail}
+                                            onChange={(e) => setOtherReasonDetail(e.target.value)}
+                                            className="w-full bg-navy-950 text-sm text-bege-100 p-2 rounded border border-navy-800 outline-none focus:border-red-500 min-h-[80px]"
+                                         />
+                                         <p className="text-[10px] text-ocre-500 mt-1">* Penalidade de XP será aplicada até aprovação.</p>
+                                     </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex gap-4">
+                        <button 
+                            onClick={() => setCancelModalEvent(null)}
+                            className="flex-1 py-3 text-bege-200 hover:text-white font-bold"
+                        >
+                            Voltar
+                        </button>
+                        <button 
+                            onClick={submitCancellation}
+                            disabled={!cancelReason || (cancelReason === 'Doença na Família' && !familyMember) || (cancelReason === 'Outros' && !otherReasonDetail)}
+                            className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold shadow-lg"
+                        >
+                            Confirmar Cancelamento
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* CREATE EVENT MODAL */}
       {showModal && (

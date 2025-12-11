@@ -183,10 +183,21 @@ export const INITIAL_POSTS: PostItem[] = [
     title: 'Important Announcement',
     content: 'The next rehearsal is moved to Tuesday at 8 PM due to venue availability.',
     postType: 'TEXT',
+    category: 'WALL',
     authorId: 'Maestro Augusto (Gestor Geral)',
     createdAt: Date.now() - 3600000, // 1 hour ago
-    likes: 5,
-    comments: 0,
+    likedBy: ['u2', 'u3', 'u4'],
+    comments: [
+        {
+            id: 'c1',
+            authorId: 'u2',
+            authorName: 'Sara',
+            content: 'Noted, thanks Maestro!',
+            createdAt: Date.now() - 3500000,
+            likedBy: ['u1'],
+            replies: []
+        }
+    ],
     visibility: 'PUBLIC'
   }
 ];
