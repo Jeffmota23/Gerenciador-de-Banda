@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { PostItem, User, Comment } from '../types';
-import { Heart, MessageCircle, Share2, Video, UserPlus, Check, Sparkles, Music, Lock, MapPin, Plus, Mic, Send, Smile, MoreHorizontal, Edit2, Trash2, CornerDownRight, Link as LinkIcon, CheckCircle2, Repeat, ExternalLink, X, AlertTriangle } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Video, UserPlus, Check, Sparkles, Music, Lock, MapPin, Plus, Mic, Send, Smile, MoreHorizontal, Edit2, Trash2, CornerDownRight, Link as LinkIcon, CheckCircle2, Repeat, ExternalLink, X, AlertTriangle, Search, UserCheck, Users, Filter } from 'lucide-react';
 import { CreatePostModal } from './CreatePostModal';
 import { useApp } from '../App';
 
@@ -185,14 +185,16 @@ const CommentSection = ({ post, currentUser }: { post: PostItem, currentUser: Us
 export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onToggleFollow, onAddPost }) => {
   const { togglePostLike, sharePost } = useApp();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDiscoveryModal, setShowDiscoveryModal] = useState(false); // Mobile Search State
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeShareMenuId, setActiveShareMenuId] = useState<string | null>(null);
   
-  // Share Modal State (Prompt for commentary)
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Share Modal State
   const [shareConfirmPost, setShareConfirmPost] = useState<PostItem | null>(null);
   const [shareCommentary, setShareCommentary] = useState('');
-
-  // Feedback state
   const [showShareToast, setShowShareToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -245,6 +247,16 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
       setTimeout(() => setShowShareToast(false), 3000);
   };
 
+  // --- SEARCH LOGIC ---
+  const searchResults = useMemo(() => {
+     if (!searchQuery.trim()) return [];
+     const lowerQuery = searchQuery.toLowerCase();
+     return allUsers.filter(u => 
+        u.id !== currentUser.id && // Exclude self
+        (u.name.toLowerCase().includes(lowerQuery) || u.instrument.toLowerCase().includes(lowerQuery))
+     );
+  }, [allUsers, searchQuery, currentUser.id]);
+
   // --- RECOMMENDATION ENGINE ---
   const recommendations = useMemo(() => {
     return allUsers
@@ -257,38 +269,144 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
           score += 3;
           reasons.push("Mesmo Naipe");
         } 
-        const levelDiff = candidate.level - currentUser.level;
-        if (Math.abs(levelDiff) <= 5) {
+        const levelDiff = Math.abs(candidate.level - currentUser.level);
+        if (levelDiff <= 3) {
           score += 2;
           reasons.push("Nível Compatível");
-        } 
+        } else if (levelDiff <= 10) {
+          score += 1;
+        }
+
+        // Slight boost for highly active users
+        if (candidate.attendanceRate > 90) {
+            score += 0.5;
+        }
+
         return { user: candidate, score, reasons };
       })
       .filter(rec => rec.score > 0) 
       .sort((a, b) => b.score - a.score) 
-      .slice(0, 4); 
+      .slice(0, 5); 
   }, [currentUser, allUsers]);
+
+  // --- SUB-COMPONENT: USER CARD ---
+  const UserCard = ({ user, reasons, isResult = false }: { user: User, reasons?: string[], isResult?: boolean }) => {
+      const isFollowing = currentUser.following.includes(user.id);
+      
+      return (
+        <div className="flex items-center justify-between group p-3 rounded-xl hover:bg-navy-700/50 transition-colors border border-transparent hover:border-navy-600">
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-navy-700 flex items-center justify-center font-bold text-bege-200 border border-navy-600 shadow-sm relative">
+                    {user.name.charAt(0)}
+                    {user.role !== 'MEMBER' && <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-ocre-500 rounded-full border-2 border-navy-800"></div>}
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-bege-50 leading-tight">{user.name.split(' ').slice(0, 2).join(' ')}</p>
+                    <p className="text-xs text-bege-200/60 flex items-center gap-1">
+                        <Music className="w-3 h-3" /> {user.instrument}
+                    </p>
+                    {reasons && reasons.length > 0 && (
+                        <div className="flex gap-1 mt-1">
+                            {reasons.map(r => (
+                                <span key={r} className="text-[9px] bg-ocre-900/30 text-ocre-400 px-1.5 py-0.5 rounded border border-ocre-900/50">{r}</span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+            <button 
+                onClick={() => onToggleFollow(user.id)} 
+                className={`p-2 rounded-full transition-all border ${
+                    isFollowing 
+                    ? 'bg-navy-900 text-green-500 border-green-900 hover:bg-red-900/20 hover:text-red-400 hover:border-red-900' 
+                    : 'bg-navy-900 hover:bg-ocre-600 text-ocre-500 hover:text-white border-navy-600'
+                }`}
+                title={isFollowing ? "Deixar de seguir" : "Seguir"}
+            >
+                {isFollowing ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+            </button>
+        </div>
+      );
+  };
+
+  // --- REUSABLE DISCOVERY PANEL CONTENT ---
+  const DiscoveryContent = () => (
+      <div className="animate-fade-in h-full flex flex-col">
+         {/* Search Input */}
+         <div className="relative mb-6">
+            <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-ocre-500 transition-colors" />
+            <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar músicos ou naipes..."
+                className="w-full bg-navy-900 border border-navy-600 rounded-lg py-2.5 pl-10 pr-8 text-sm text-bege-100 outline-none focus:border-ocre-500 focus:ring-1 focus:ring-ocre-500 transition-all shadow-inner"
+            />
+            {searchQuery && (
+                <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-bege-200"
+                >
+                    <X className="w-4 h-4" />
+                </button>
+            )}
+            </div>
+         </div>
+
+         {/* Content Area */}
+         <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {searchQuery ? (
+                <div>
+                    <h3 className="font-bold text-sm text-bege-50 mb-3 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-ocre-500" /> Resultados da Busca
+                    </h3>
+                    {searchResults.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-gray-400">
+                            <Search className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                            Nenhum músico encontrado.
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {searchResults.map(user => (
+                                <UserCard key={user.id} user={user} isResult={true} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div>
+                    <h3 className="font-serif text-lg text-bege-50 mb-4 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-ocre-500" /> Sugestões para Você
+                    </h3>
+                    
+                    {recommendations.length === 0 ? (
+                    <p className="text-sm text-bege-200/50 text-center py-4">Todas as sugestões foram seguidas!</p>
+                    ) : (
+                    <div className="space-y-3">
+                        {recommendations.map(({ user, reasons }) => (
+                        <UserCard key={user.id} user={user} reasons={reasons} />
+                        ))}
+                    </div>
+                    )}
+                </div>
+            )}
+         </div>
+      </div>
+  );
 
   // --- VISIBILITY FILTER ---
   const visiblePosts = posts.filter(post => {
-    // Show posts belonging to COMMUNITY category
-    // Also usually show Shared posts (which are technically community activity)
     if (post.category !== 'COMMUNITY' && !post.originalPostId) return false;
-
     if (post.authorId === currentUser.name) return true; 
     if (post.visibility === 'PUBLIC') return true;
-    
-    // Check follow status (simplified mock logic matching name to ID roughly for demo)
     const authorUser = allUsers.find(u => u.name === post.authorId);
     if (!authorUser) return false;
     return currentUser.following.includes(authorUser.id);
   });
 
-  // --- RENDER POST CONTENT HELPER ---
   const renderPostContent = (post: PostItem, isNested = false) => {
       return (
           <>
-            {/* Header if nested */}
             {isNested && (
                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-navy-700/50">
                     <div className="w-6 h-6 rounded-full bg-navy-600 flex items-center justify-center font-bold text-bege-100 text-[10px]">
@@ -305,7 +423,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
 
             <p className={`text-bege-100 ${isNested ? 'text-xs line-clamp-3' : 'mb-4'} whitespace-pre-wrap`}>{post.content}</p>
             
-            {/* Media Grid */}
             {post.mediaUrls && post.mediaUrls.length > 0 && (
                 <div className={`grid gap-2 ${post.mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} mt-2`}>
                     {post.mediaUrls.map((url, i) => (
@@ -344,7 +461,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
   return (
     <div className="max-w-6xl mx-auto mb-20 animate-fade-in relative">
       
-      {/* Toast Notification */}
       {showShareToast && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-in">
               <div className="bg-ocre-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm font-bold border border-white/20">
@@ -353,7 +469,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
           </div>
       )}
 
-      {/* Share Confirmation Modal */}
       {shareConfirmPost && (
           <div className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-[90] p-4">
               <div className="bg-navy-900 w-full max-w-md rounded-2xl border border-navy-600 shadow-2xl overflow-hidden animate-fade-in">
@@ -373,7 +488,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                           className="w-full bg-navy-950 border border-navy-700 rounded-lg p-3 text-bege-100 focus:border-ocre-500 outline-none resize-none h-24 mb-4"
                       />
 
-                      {/* Preview of shared post */}
                       <div className="border border-navy-700 rounded-lg p-3 bg-navy-950/50 opacity-70 pointer-events-none">
                           <div className="flex items-center gap-2 mb-2">
                               <div className="w-5 h-5 rounded-full bg-navy-700 flex items-center justify-center text-[10px] text-bege-200">
@@ -398,6 +512,23 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
           </div>
       )}
 
+      {/* MOBILE SEARCH MODAL */}
+      {showDiscoveryModal && (
+         <div className="fixed inset-0 z-[80] bg-navy-950/95 backdrop-blur-sm p-4 animate-fade-in lg:hidden">
+            <div className="flex justify-end mb-2">
+               <button 
+                 onClick={() => setShowDiscoveryModal(false)}
+                 className="p-2 rounded-full bg-navy-800 text-bege-200 border border-navy-700 hover:text-white"
+               >
+                 <X className="w-6 h-6" />
+               </button>
+            </div>
+            <div className="bg-navy-800 rounded-xl p-4 border border-navy-700 h-[90%] shadow-2xl">
+                <DiscoveryContent />
+            </div>
+         </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* --- LEFT COLUMN: FEED --- */}
@@ -408,19 +539,29 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                 <p className="text-bege-200">Compartilhe seu progresso e apoie seus colegas.</p>
             </div>
             
-            {onAddPost && (
+            <div className="flex gap-2">
+                {/* Mobile Search Button */}
                 <button 
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-ocre-600 hover:bg-ocre-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
+                  onClick={() => setShowDiscoveryModal(true)}
+                  className="lg:hidden bg-navy-800 hover:bg-navy-700 text-bege-100 p-2.5 rounded-lg border border-navy-600"
+                  title="Buscar Pessoas"
                 >
-                  <Plus className="w-5 h-5" /> Criar
+                   <Search className="w-5 h-5" />
                 </button>
-            )}
+
+                {onAddPost && (
+                    <button 
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-ocre-600 hover:bg-ocre-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
+                    >
+                    <Plus className="w-5 h-5" /> Criar
+                    </button>
+                )}
+            </div>
           </div>
 
           {visiblePosts.length === 0 ? (
             <div className="text-center py-20 bg-navy-800/30 rounded-xl border border-dashed border-navy-700">
-               <Video className="w-12 h-12 text-navy-600 mx-auto mb-4" />
                <p className="text-bege-200/60">Nenhuma postagem visível. Seja o primeiro a postar!</p>
                <button onClick={() => setShowCreateModal(true)} className="mt-4 text-ocre-500 font-bold hover:underline">Criar Postagem</button>
             </div>
@@ -430,13 +571,11 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                 const isLiked = post.likedBy.includes(currentUser.id);
                 const commentsCount = post.comments.reduce((acc, c) => acc + 1 + c.replies.length, 0);
 
-                // Check if this is a share (Repost)
                 const originalPost = post.originalPostId ? posts.find(p => p.id === post.originalPostId) : null;
                 const isShare = !!post.originalPostId;
 
                 return (
                   <div key={post.id} className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden shadow-lg transition-all hover:border-navy-600 relative">
-                    {/* Header */}
                     <div className="p-4 flex items-center gap-3 border-b border-navy-700/50">
                       <div className="w-10 h-10 rounded-full bg-navy-600 flex items-center justify-center font-bold text-bege-100">
                         {post.authorId.substring(0,2).toUpperCase()}
@@ -454,14 +593,11 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                       </div>
                     </div>
 
-                    {/* Content */}
                     <div className="p-4">
-                      {/* If it's a share, show author commentary first */}
                       {isShare && post.content && (
                           <p className="text-bege-100 mb-4 whitespace-pre-wrap">{post.content}</p>
                       )}
 
-                      {/* If it's a share, render the nested original post */}
                       {isShare ? (
                           originalPost ? (
                             <div className="border border-navy-600 rounded-xl p-4 bg-navy-900/50 hover:bg-navy-900 transition-colors cursor-pointer">
@@ -474,12 +610,10 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                             </div>
                           )
                       ) : (
-                          // Normal Post Render
                           renderPostContent(post)
                       )}
                     </div>
 
-                    {/* Actions */}
                     <div className="bg-navy-900/50 p-3 flex gap-6 text-sm text-bege-200 font-medium select-none relative z-10">
                       <button 
                         onClick={() => togglePostLike(post.id)}
@@ -497,7 +631,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                         {commentsCount} <span className="hidden sm:inline">Comentários</span>
                       </button>
                       
-                      {/* Share Menu Trigger */}
                       <div className="ml-auto relative">
                         <button 
                             onClick={() => setActiveShareMenuId(activeShareMenuId === post.id ? null : post.id)}
@@ -506,7 +639,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                             <Share2 className="w-4 h-4" /> Compartilhar
                         </button>
 
-                        {/* Dropdown Menu */}
                         {activeShareMenuId === post.id && (
                             <div className="absolute bottom-full right-0 mb-2 w-48 bg-navy-900 border border-navy-600 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-20">
                                 <button 
@@ -526,7 +658,6 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                       </div>
                     </div>
 
-                    {/* Comment Section (Expanded) */}
                     {activeCommentPostId === post.id && (
                         <div className="p-4 bg-navy-950/30">
                             <CommentSection post={post} currentUser={currentUser} />
@@ -539,37 +670,10 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
           )}
         </div>
 
-        {/* --- RIGHT COLUMN: DISCOVERY SIDEBAR --- */}
+        {/* --- RIGHT COLUMN: DISCOVERY SIDEBAR (DESKTOP) --- */}
         <div className="space-y-6 hidden lg:block">
-           <div className="bg-navy-800 p-5 rounded-xl border border-navy-700 shadow-lg sticky top-6">
-              <h3 className="font-serif text-lg text-bege-50 mb-4 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-ocre-500" /> Sugestões para Você
-              </h3>
-               {/* Recommendations Logic kept same as before... */}
-              {recommendations.length === 0 ? (
-                <p className="text-sm text-bege-200/50 text-center py-4">Nenhuma sugestão no momento.</p>
-              ) : (
-                <div className="space-y-4">
-                  {recommendations.map(({ user, reasons }) => (
-                    <div key={user.id} className="flex items-center justify-between group">
-                      <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-full bg-navy-700 flex items-center justify-center font-bold text-bege-200 border border-navy-600">
-                           {user.name.charAt(0)}
-                         </div>
-                         <div>
-                           <p className="text-sm font-bold text-bege-50">{user.name.split(' ')[0]}</p>
-                           <p className="text-xs text-bege-200/60 flex items-center gap-1">
-                              <Music className="w-3 h-3" /> {user.instrument}
-                           </p>
-                         </div>
-                      </div>
-                      <button onClick={() => onToggleFollow(user.id)} className="p-2 rounded-full bg-navy-900 hover:bg-ocre-600 text-ocre-500 hover:text-white transition-all border border-navy-600">
-                         <UserPlus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+           <div className="bg-navy-800 p-5 rounded-xl border border-navy-700 shadow-lg sticky top-6 max-h-[calc(100vh-100px)] flex flex-col">
+              <DiscoveryContent />
            </div>
         </div>
 

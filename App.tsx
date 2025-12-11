@@ -1,4 +1,3 @@
-
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { 
@@ -573,21 +572,31 @@ const AuthenticatedApp = () => {
 
   // Lazy Initialization: Loads strictly for this currentUser.id on mount
   const [viewHistory, setViewHistory] = useState(() => {
-      const storageKey = `bandSocial_viewHistory_${currentUser.id}`;
-      const saved = localStorage.getItem(storageKey);
-      
-      let history = saved ? JSON.parse(saved) : getDefaultHistory();
-      
-      // MIGRATION: Ensure new fields exist if loading old data structure
-      if (history.lastSeenLevel === undefined) history.lastSeenLevel = currentUser.level;
-      if (history.lastSeenRole === undefined) history.lastSeenRole = currentUser.role;
-      
-      return history;
+      try {
+        const storageKey = `bandSocial_viewHistory_${currentUser.id}`;
+        const saved = localStorage.getItem(storageKey);
+        
+        let history = saved ? JSON.parse(saved) : getDefaultHistory();
+        
+        // MIGRATION: Ensure new fields exist if loading old data structure
+        if (history.lastSeenLevel === undefined) history.lastSeenLevel = currentUser.level;
+        if (history.lastSeenRole === undefined) history.lastSeenRole = currentUser.role;
+        
+        return history;
+      } catch (e) {
+        // Fallback for private browsing where localStorage is blocked
+        console.warn("LocalStorage access denied, using default history");
+        return getDefaultHistory();
+      }
   });
 
   // Effect: Sync state to LocalStorage whenever it changes
   useEffect(() => {
-      localStorage.setItem(`bandSocial_viewHistory_${currentUser.id}`, JSON.stringify(viewHistory));
+      try {
+        localStorage.setItem(`bandSocial_viewHistory_${currentUser.id}`, JSON.stringify(viewHistory));
+      } catch (e) {
+        // Ignore storage errors
+      }
   }, [viewHistory, currentUser.id]);
 
   // Effect: Update state based on current route
