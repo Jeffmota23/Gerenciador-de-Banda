@@ -375,6 +375,10 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
 
   const sortedEvents = [...events].sort((a, b) => a.date - b.date);
 
+  // Styles for inputs to ensure contrast
+  const inputClass = "w-full bg-[#0b1120] border border-navy-700 p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none transition-colors placeholder-navy-500";
+
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20 animate-fade-in relative">
       
@@ -945,7 +949,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                     <div>
                         <label className="text-xs font-bold text-bege-200 mb-1 block">Nome do Evento</label>
                         <input 
-                          className="w-full bg-navy-900 border border-navy-700 p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none transition-colors"
+                          className={inputClass}
                           placeholder="Ex: Concerto de Natal Beneficente"
                           value={title} onChange={e => setTitle(e.target.value)}
                         />
@@ -956,7 +960,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                             <label className="text-xs font-bold text-bege-200 mb-1 block">Data</label>
                             <input 
                               type="date"
-                              className="w-full bg-navy-900 border border-navy-700 p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none"
+                              className={inputClass}
                               value={date} onChange={e => setDate(e.target.value)}
                             />
                         </div>
@@ -964,7 +968,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                             <label className="text-xs font-bold text-bege-200 mb-1 block">Hora Início</label>
                             <input 
                               type="time"
-                              className="w-full bg-navy-900 border border-navy-700 p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none"
+                              className={inputClass}
                               value={time} onChange={e => setTime(e.target.value)}
                             />
                         </div>
@@ -978,7 +982,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                             </label>
                             <input 
                               type="number"
-                              className={`w-full bg-navy-900 border p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none transition-all duration-500 ${isDurationAutoFilled ? 'border-ocre-500 shadow-[0_0_10px_rgba(180,83,9,0.3)] text-ocre-400 font-bold' : 'border-navy-700'}`}
+                              className={`w-full bg-[#0b1120] border p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none transition-all duration-500 placeholder-navy-500 ${isDurationAutoFilled ? 'border-ocre-500 shadow-[0_0_10px_rgba(180,83,9,0.3)] text-ocre-400 font-bold' : 'border-navy-700'}`}
                               value={duration} onChange={e => setDuration(parseInt(e.target.value))}
                             />
                         </div>
@@ -986,7 +990,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                             <label className="text-xs font-bold text-bege-200 mb-1 block">Local</label>
                             <div className="flex gap-2">
                                 <input 
-                                className="flex-1 bg-navy-900 border border-navy-700 p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none text-xs truncate"
+                                className="flex-1 bg-[#0b1120] border border-navy-700 p-3 rounded-lg text-bege-100 focus:border-ocre-500 outline-none text-xs truncate placeholder-navy-500"
                                 placeholder="Digite ou use o mapa..."
                                 value={locationData ? locationData.address : locationString} 
                                 onChange={e => {
@@ -1011,7 +1015,7 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                         <p className="text-[10px] text-gray-500 mb-2">Após essa data, os membros não poderão alterar a presença sem penalidade.</p>
                         <input 
                               type="date"
-                              className="w-full bg-navy-950 border border-navy-700 p-2 rounded text-bege-100 focus:border-ocre-500 outline-none"
+                              className={inputClass}
                               value={deadlineDate} onChange={e => setDeadlineDate(e.target.value)}
                         />
                     </div>

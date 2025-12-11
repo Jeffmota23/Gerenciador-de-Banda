@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { User, LocationData } from '../types';
-import { X, Image as ImageIcon, Video, Mic, MapPin, Hash, AtSign, Send, Camera, Trash2, StopCircle, Play } from 'lucide-react';
+import { X, Image as ImageIcon, Video, Mic, MapPin, Hash, AtSign, Send, Camera, Trash2, StopCircle, Play, AlertCircle, Plus } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 
 interface Props {
@@ -28,11 +28,26 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
   const videoInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  const MAX_CHARS = 500;
+  const MAX_IMAGES = 15;
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'IMAGE' | 'VIDEO') => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const url = URL.createObjectURL(file);
-      setMediaFiles(prev => [...prev, { type, url, file }]);
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      const currentCount = mediaFiles.length;
+      
+      if (currentCount + newFiles.length > MAX_IMAGES) {
+          alert(`Você pode adicionar no máximo ${MAX_IMAGES} mídias por postagem.`);
+          return;
+      }
+
+      const processedFiles = newFiles.map(file => ({
+          type,
+          url: URL.createObjectURL(file),
+          file
+      }));
+
+      setMediaFiles(prev => [...prev, ...processedFiles]);
     }
   };
 
@@ -107,7 +122,9 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
   };
 
   const insertTag = (char: string) => {
-    setContent(prev => prev + char);
+    if (content.length + char.length <= MAX_CHARS) {
+        setContent(prev => prev + char);
+    }
   };
 
   return (
@@ -131,9 +148,17 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
              className="w-full bg-transparent text-lg text-bege-100 placeholder-bege-200/30 outline-none resize-none min-h-[120px]"
              placeholder="No que você está pensando? Compartilhe ideias, fotos ou áudios..."
              value={content}
+             maxLength={MAX_CHARS}
              onChange={e => setContent(e.target.value)}
              autoFocus
            />
+           
+           {/* Character Counter */}
+           <div className="flex justify-end mb-2">
+               <span className={`text-[10px] font-bold ${content.length >= MAX_CHARS ? 'text-red-500' : 'text-bege-200/40'}`}>
+                   {content.length}/{MAX_CHARS}
+               </span>
+           </div>
 
            {/* Location Chip */}
            {location && (
@@ -143,11 +168,11 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
              </div>
            )}
 
-           {/* Media Grid */}
+           {/* Media Grid (Scrollable for up to 15 items) */}
            {mediaFiles.length > 0 && (
-             <div className="grid grid-cols-2 gap-2 mb-4">
+             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
                 {mediaFiles.map((media, idx) => (
-                  <div key={idx} className="relative rounded-lg overflow-hidden border border-navy-600 group aspect-video bg-black">
+                  <div key={idx} className="relative rounded-lg overflow-hidden border border-navy-600 group aspect-square bg-black">
                      {media.type === 'IMAGE' ? (
                        <img src={media.url} className="w-full h-full object-cover" />
                      ) : (
@@ -155,12 +180,21 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
                      )}
                      <button 
                        onClick={() => removeMedia(idx)}
-                       className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
+                       className="absolute top-1 right-1 bg-black/60 text-white p-0.5 rounded-full hover:bg-red-600 transition-colors"
                      >
-                       <X className="w-4 h-4" />
+                       <X className="w-3 h-3" />
                      </button>
                   </div>
                 ))}
+                {mediaFiles.length < MAX_IMAGES && (
+                     <button 
+                        onClick={() => imageInputRef.current?.click()}
+                        className="aspect-square rounded-lg border border-dashed border-navy-600 flex flex-col items-center justify-center text-navy-500 hover:text-bege-200 hover:border-bege-200/50 transition-colors bg-navy-900/50"
+                     >
+                        <Plus className="w-5 h-5 mb-1" />
+                        <span className="text-[9px] font-bold uppercase">Add</span>
+                     </button>
+                )}
              </div>
            )}
 
@@ -210,7 +244,7 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
            <div className="flex justify-between items-center">
               <div className="flex gap-1">
                  {/* Hidden Inputs */}
-                 <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={e => handleFileSelect(e, 'IMAGE')} />
+                 <input type="file" ref={imageInputRef} accept="image/*" multiple className="hidden" onChange={e => handleFileSelect(e, 'IMAGE')} />
                  <input type="file" ref={videoInputRef} accept="video/*" className="hidden" onChange={e => handleFileSelect(e, 'VIDEO')} />
                  <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" onChange={e => handleFileSelect(e, 'IMAGE')} />
 
@@ -231,13 +265,18 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
                  </button>
               </div>
 
-              <button 
-                onClick={handleSubmit} 
-                disabled={!content && mediaFiles.length === 0 && !audioBlob}
-                className="bg-ocre-600 hover:bg-ocre-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95"
-              >
-                 <Send className="w-4 h-4" /> Publicar
-              </button>
+              <div className="flex items-center gap-3">
+                 <span className="text-[10px] text-gray-500 hidden sm:block">
+                     {mediaFiles.length} mídia(s)
+                 </span>
+                 <button 
+                    onClick={handleSubmit} 
+                    disabled={!content && mediaFiles.length === 0 && !audioBlob}
+                    className="bg-ocre-600 hover:bg-ocre-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95"
+                 >
+                    <Send className="w-4 h-4" /> Publicar
+                 </button>
+              </div>
            </div>
         </div>
 

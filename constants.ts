@@ -13,28 +13,80 @@ export const XP_MATRIX = {
   [EventType.SOCIAL]: { confirm: 20, completion: 20 }, // Total 40 (New - Resenha)
 };
 
+const DEFAULT_ADDRESS = { cep: '01001-000', street: 'Rua da Música', number: '100', city: 'São Paulo', state: 'SP' };
+
 export const MOCK_USERS: User[] = [
   // Level 1: General Manager (Acesso Total)
-  { id: 'u1', name: 'Maestro Augusto (Gestor Geral)', role: UserRole.GENERAL_MANAGER, instrument: 'Regente', xp: 9500, level: 50, attendanceRate: 100, email: 'maestro@bandsocial.com', following: [] },
+  { 
+    id: 'u1', name: 'Maestro Augusto', nickname: 'Maestro', role: UserRole.GENERAL_MANAGER, instrument: 'Regente', experienceTime: '20 anos',
+    xp: 9500, level: 50, attendanceRate: 100, email: 'maestro@bandsocial.com', 
+    cpf: '000.000.000-01', rg: '00.000.001-1', phone: '(11) 99999-0001', address: DEFAULT_ADDRESS,
+    following: [] 
+  },
 
   // Level 2: Agenda Managers (Eventos)
-  { id: 'u2', name: 'Sara (Gestora Agenda 1)', role: UserRole.AGENDA_MANAGER_1, instrument: 'Cornet', xp: 4200, level: 22, attendanceRate: 95, following: ['u1'] },
-  { id: 'u3', name: 'Miguel (Gestor Agenda 2)', role: UserRole.AGENDA_MANAGER_2, instrument: 'Trombone', xp: 3800, level: 19, attendanceRate: 88, following: [] },
+  { 
+    id: 'u2', name: 'Sara Silva', nickname: 'SaraCornet', role: UserRole.AGENDA_MANAGER_1, instrument: 'Cornet', experienceTime: '8 anos',
+    xp: 4200, level: 22, attendanceRate: 95, 
+    cpf: '000.000.000-02', rg: '00.000.002-2', phone: '(11) 99999-0002', address: DEFAULT_ADDRESS,
+    following: ['u1'] 
+  },
+  { 
+    id: 'u3', name: 'Miguel Santos', nickname: 'MigTrombone', role: UserRole.AGENDA_MANAGER_2, instrument: 'Trombone', experienceTime: '6 anos',
+    xp: 3800, level: 19, attendanceRate: 88, 
+    cpf: '000.000.000-03', rg: '00.000.003-3', phone: '(11) 99999-0003', address: DEFAULT_ADDRESS,
+    following: [] 
+  },
 
   // Level 3: Wall/Post Managers (Conteúdo Oficial)
-  { id: 'u4', name: 'Jéssica (Gestora Mural 1)', role: UserRole.WALL_MANAGER_1, instrument: 'Sax Horn', xp: 5100, level: 26, attendanceRate: 92, following: ['u1', 'u6'] },
-  { id: 'u5', name: 'Tomás (Gestor Mural 2)', role: UserRole.WALL_MANAGER_2, instrument: 'Percussão', xp: 2900, level: 14, attendanceRate: 85, following: [] },
+  { 
+    id: 'u4', name: 'Jéssica Lima', nickname: 'JessHorn', role: UserRole.WALL_MANAGER_1, instrument: 'Sax Horn', experienceTime: '7 anos',
+    xp: 5100, level: 26, attendanceRate: 92, 
+    cpf: '000.000.000-04', rg: '00.000.004-4', phone: '(11) 99999-0004', address: DEFAULT_ADDRESS,
+    following: ['u1', 'u6'] 
+  },
+  { 
+    id: 'u5', name: 'Tomás Costa', nickname: 'TomPerc', role: UserRole.WALL_MANAGER_2, instrument: 'Percussão', experienceTime: '4 anos',
+    xp: 2900, level: 14, attendanceRate: 85, 
+    cpf: '000.000.000-05', rg: '00.000.005-5', phone: '(11) 99999-0005', address: DEFAULT_ADDRESS,
+    following: [] 
+  },
 
   // Level 4: Repertoire Managers (Arquivistas)
-  { id: 'u6', name: 'Emília (Gestora Repertório 1)', role: UserRole.REPERTOIRE_MANAGER_1, instrument: 'Trompa', xp: 6200, level: 31, attendanceRate: 98, following: [] },
-  { id: 'u7', name: 'Davi (Gestor Repertório 2)', role: UserRole.REPERTOIRE_MANAGER_2, instrument: 'Euphonium', xp: 4500, level: 23, attendanceRate: 90, following: ['u3'] },
+  { 
+    id: 'u6', name: 'Emília Souza', nickname: 'EmiHorn', role: UserRole.REPERTOIRE_MANAGER_1, instrument: 'Trompa', experienceTime: '10 anos',
+    xp: 6200, level: 31, attendanceRate: 98, 
+    cpf: '000.000.000-06', rg: '00.000.006-6', phone: '(11) 99999-0006', address: DEFAULT_ADDRESS,
+    following: [] 
+  },
+  { 
+    id: 'u7', name: 'Davi Oliveira', nickname: 'DaviEuph', role: UserRole.REPERTOIRE_MANAGER_2, instrument: 'Euphonium', experienceTime: '9 anos',
+    xp: 4500, level: 23, attendanceRate: 90, 
+    cpf: '000.000.000-07', rg: '00.000.007-7', phone: '(11) 99999-0007', address: DEFAULT_ADDRESS,
+    following: ['u3'] 
+  },
 
   // Level 5: People Managers (Comunidade/Presença)
-  { id: 'u8', name: 'Laura (Gestora Pessoas 1)', role: UserRole.PEOPLE_MANAGER_1, instrument: 'Flugelhorn', xp: 7000, level: 35, attendanceRate: 99, following: ['u2'] },
-  { id: 'u9', name: 'Cristiano (Gestor Pessoas 2)', role: UserRole.PEOPLE_MANAGER_2, instrument: 'Tuba', xp: 3100, level: 15, attendanceRate: 82, following: [] },
+  { 
+    id: 'u8', name: 'Laura Mendes', nickname: 'LauFlugel', role: UserRole.PEOPLE_MANAGER_1, instrument: 'Flugelhorn', experienceTime: '12 anos',
+    xp: 7000, level: 35, attendanceRate: 99, 
+    cpf: '000.000.000-08', rg: '00.000.008-8', phone: '(11) 99999-0008', address: DEFAULT_ADDRESS,
+    following: ['u2'] 
+  },
+  { 
+    id: 'u9', name: 'Cristiano Rocha', nickname: 'CrisTuba', role: UserRole.PEOPLE_MANAGER_2, instrument: 'Tuba', experienceTime: '5 anos',
+    xp: 3100, level: 15, attendanceRate: 82, 
+    cpf: '000.000.000-09', rg: '00.000.009-9', phone: '(11) 99999-0009', address: DEFAULT_ADDRESS,
+    following: [] 
+  },
 
   // Members
-  { id: 'u10', name: 'João (Membro)', role: UserRole.MEMBER, instrument: 'Barítono', xp: 1200, level: 6, attendanceRate: 75, following: ['u1', 'u7'] },
+  { 
+    id: 'u10', name: 'João Batista', nickname: 'JoaoBari', role: UserRole.MEMBER, instrument: 'Barítono', experienceTime: '2 anos',
+    xp: 1200, level: 6, attendanceRate: 75, 
+    cpf: '000.000.000-10', rg: '00.000.010-10', phone: '(11) 99999-0010', address: DEFAULT_ADDRESS,
+    following: ['u1', 'u7'] 
+  },
 ];
 
 export const INITIAL_REPERTOIRE: RepertoireItem[] = [
@@ -184,14 +236,14 @@ export const INITIAL_POSTS: PostItem[] = [
     content: 'The next rehearsal is moved to Tuesday at 8 PM due to venue availability.',
     postType: 'TEXT',
     category: 'WALL',
-    authorId: 'Maestro Augusto (Gestor Geral)',
+    authorId: 'Maestro Augusto',
     createdAt: Date.now() - 3600000, // 1 hour ago
     likedBy: ['u2', 'u3', 'u4'],
     comments: [
         {
             id: 'c1',
             authorId: 'u2',
-            authorName: 'Sara',
+            authorName: 'SaraCornet',
             content: 'Noted, thanks Maestro!',
             createdAt: Date.now() - 3500000,
             likedBy: ['u1'],

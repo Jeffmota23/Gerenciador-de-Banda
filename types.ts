@@ -57,16 +57,38 @@ export interface LocationData {
   previewUrl?: string; 
 }
 
+export interface AddressData {
+  cep: string;
+  street: string;
+  number: string;
+  city: string;
+  state: string;
+}
+
 export interface User {
   id: string;
   name: string;
+  nickname: string; // Unique ID for display
   role: UserRole;
   instrument: string;
+  experienceTime: string; // e.g. "5 anos"
+  
+  // Stats
   xp: number;
   level: number;
   attendanceRate: number; // 0-100
+  
+  // Personal Data (Private)
+  cpf: string;
+  rg: string;
+  phone: string;
+  address: AddressData;
   email?: string;
+  
+  // Public Profile
   avatarUrl?: string;
+  
+  // Social Graph
   following: string[]; 
 }
 
@@ -220,4 +242,7 @@ export interface AppContextType extends AppState {
   // SYSTEM NOTIFICATIONS
   notificationPermission: NotificationPermission;
   requestNotificationPermission: () => Promise<void>;
+  
+  // NEW: Register User
+  registerUser: (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => void;
 }

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User, PostItem, UserRole, PollOption, LocationData, EventItem, Comment } from '../types';
-import { Plus, Image as ImageIcon, Link as LinkIcon, AtSign, Hash, BarChart2, MessageSquare, Trash2, X, Check, Users, MapPin, Heart, Share2, Music, Calendar, Clock, MoreHorizontal, Smile, Send, Edit2, CheckCircle2, Repeat, ExternalLink } from 'lucide-react';
+import { Plus, Image as ImageIcon, Link as LinkIcon, AtSign, Hash, BarChart2, MessageSquare, Trash2, X, Check, Users, MapPin, Heart, Share2, Music, Calendar, Clock, MoreHorizontal, Smile, Send, Edit2, CheckCircle2, Repeat, ExternalLink, Maximize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
 import { useNavigate } from 'react-router-dom';
 import { CreatePostModal } from './CreatePostModal';
@@ -16,6 +16,96 @@ interface Props {
   onVote: (postId: string, optionId: string) => void;
   onDelete: (postId: string, reason: string) => void;
 }
+
+// --- SHARED HELPER COMPONENTS (Duplicated from Community.tsx for isolation but could be extracted) ---
+
+const Lightbox = ({ imageUrl, onClose }: { imageUrl: string, onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+            <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors z-50">
+                <X className="w-8 h-8" />
+            </button>
+            <img src={imageUrl} alt="Full size" className="max-w-full max-h-full object-contain rounded-sm shadow-2xl pointer-events-auto" onClick={(e) => e.stopPropagation()} />
+        </div>
+    );
+};
+
+const ExpandableText = ({ content }: { content: string }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const limit = 100;
+    
+    if (content.length <= limit) {
+        return <p className="whitespace-pre-wrap leading-relaxed">{content}</p>;
+    }
+
+    return (
+        <div className="mb-2">
+            <p className="whitespace-pre-wrap leading-relaxed">
+                {isExpanded ? content : content.slice(0, limit) + '...'}
+            </p>
+            <button 
+                onClick={() => setIsExpanded(!isExpanded)} 
+                className="text-ocre-500 font-bold italic text-sm mt-1 hover:underline"
+            >
+                {isExpanded ? 'Ler menos' : 'Leia mais'}
+            </button>
+        </div>
+    );
+};
+
+const ImageCarousel = ({ images, onImageClick }: { images: string[], onImageClick: (url: string) => void }) => {
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    const next = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveIndex((prev) => (prev + 1) % images.length);
+    };
+
+    const prev = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveIndex((prev) => (prev - 1 + images.length) % images.length);
+    };
+
+    if (images.length === 0) return null;
+
+    return (
+        <div className="mt-4 rounded-xl overflow-hidden border border-navy-700 relative group bg-black aspect-video md:aspect-[16/9]">
+            <img 
+                src={images[activeIndex]} 
+                alt={`Slide ${activeIndex}`}
+                className="w-full h-full object-contain cursor-pointer transition-opacity duration-300"
+                onClick={() => onImageClick(images[activeIndex])}
+            />
+            
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+
+            {images.length > 1 && (
+                <>
+                    <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100">
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100">
+                        <ChevronRight className="w-5 h-5" />
+                    </button>
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                        {images.map((_, idx) => (
+                            <div key={idx} className={`w-1.5 h-1.5 rounded-full transition-all ${idx === activeIndex ? 'bg-white scale-125' : 'bg-white/40'}`}></div>
+                        ))}
+                    </div>
+                     <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-bold backdrop-blur-sm">
+                        {activeIndex + 1}/{images.length}
+                    </div>
+                </>
+            )}
+             <button 
+                className="absolute bottom-3 right-3 p-1.5 bg-black/40 rounded text-white opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                onClick={(e) => { e.stopPropagation(); onImageClick(images[activeIndex]); }}
+            >
+                <Maximize2 className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
 
 // Helper Emojis
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '👏', '🎺', '🎷', '🥁', '🎵', '🎼', '🔥'];
@@ -173,6 +263,7 @@ export const Wall: React.FC<Props> = ({ currentUser, allUsers, posts, events, on
   const { togglePostLike, sharePost } = useApp();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // Share & Menu State
   const [activeShareMenuId, setActiveShareMenuId] = useState<string | null>(null);
@@ -277,6 +368,11 @@ export const Wall: React.FC<Props> = ({ currentUser, allUsers, posts, events, on
   return (
     <div className="max-w-3xl mx-auto pb-24 space-y-6 animate-fade-in relative">
       
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+          <Lightbox imageUrl={lightboxImage} onClose={() => setLightboxImage(null)} />
+      )}
+
       {/* Toast Notification */}
       {showShareToast && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-in">
@@ -436,14 +532,16 @@ export const Wall: React.FC<Props> = ({ currentUser, allUsers, posts, events, on
                     {/* POST CONTENT */}
                     <div className="p-4 text-bege-100">
                         {post.title && <h3 className="font-bold text-lg mb-2 text-white">{post.title}</h3>}
-                        <p className="whitespace-pre-wrap leading-relaxed">{post.content}</p>
+                        
+                        {/* EXPANDABLE TEXT */}
+                        <ExpandableText content={post.content} />
 
+                        {/* CAROUSEL */}
                         {post.mediaUrls && post.mediaUrls.length > 0 && (
-                            <div className="mt-4 rounded-lg overflow-hidden border border-navy-700">
-                                <img src={post.mediaUrls[0]} alt="Post Media" className="w-full h-auto object-cover max-h-[400px]" />
-                            </div>
+                            <ImageCarousel images={post.mediaUrls} onImageClick={setLightboxImage} />
                         )}
-                         {post.videoUrl && (
+
+                        {post.videoUrl && (
                             <div className="mt-4 rounded-lg overflow-hidden border border-navy-700 bg-black aspect-video">
                                 <video src={post.videoUrl} controls className="w-full h-full" />
                             </div>

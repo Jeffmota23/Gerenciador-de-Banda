@@ -1,3 +1,4 @@
+
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { 
@@ -529,13 +530,29 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     setAllUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, following: newFollowing } : u));
   };
 
+  // --- REGISTER USER LOGIC ---
+  const registerUser = (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => {
+      const newUser: User = {
+          ...userData,
+          id: `u${Date.now()}`,
+          role: UserRole.MEMBER, // New users are always MEMBERS
+          xp: 0,
+          level: 1,
+          attendanceRate: 100, // Starts perfect
+          following: []
+      };
+      
+      setAllUsers(prev => [...prev, newUser]);
+      setCurrentUser(newUser); // Auto-login after registration
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, users: allUsers, repertoire, trashBin, posts, finances, events, newsSources,
       setCurrentUser, deleteItem, restoreItem, addRepertoire, addPost, sharePost, votePoll, toggleFinanceApproval, addEvent,
       handleEventAction, markAttendance, toggleFollow, addNewsSource,
       togglePostLike, addComment, editComment, deleteComment, toggleCommentLike,
-      notificationPermission, requestNotificationPermission
+      notificationPermission, requestNotificationPermission, registerUser
     }}>
       {children}
     </AppContext.Provider>
@@ -711,11 +728,13 @@ const AuthenticatedApp = () => {
         </div>
         
         <Link to="/profile" className="flex items-center gap-2 bg-navy-800 pr-3 pl-1 py-1 rounded-full border border-navy-700 hover:border-ocre-500 transition-colors relative">
-          <div className="w-8 h-8 rounded-full bg-navy-700 flex items-center justify-center text-xs font-bold text-bege-100">
-            {currentUser.name.charAt(0)}
+          <div className="w-8 h-8 rounded-full bg-navy-700 flex items-center justify-center text-xs font-bold text-bege-100 border border-navy-600">
+            {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt="Avatar" className="w-full h-full rounded-full object-cover" />
+            ) : currentUser.name.charAt(0)}
           </div>
           <div className="text-right hidden sm:block">
-            <p className="text-[10px] font-bold text-bege-50 leading-none">{currentUser.name.split(' ')[0]}</p>
+            <p className="text-[10px] font-bold text-bege-50 leading-none">{currentUser.nickname}</p>
             <p className="text-[8px] text-ocre-500 font-bold uppercase">{currentUser.role.split('_')[0]}</p>
           </div>
           {/* HEADER PROFILE ALERT: Only for Rank/Role changes */}
@@ -779,7 +798,12 @@ const AuthenticatedApp = () => {
           } />
           <Route path="/profile" element={
             <div className="space-y-8">
-               <Profile user={currentUser} onLogout={() => setCurrentUser(null)} />
+               <Profile 
+                 user={currentUser} 
+                 allUsers={useApp().users}
+                 onToggleFollow={useApp().toggleFollow}
+                 onLogout={() => setCurrentUser(null)} 
+                />
                {currentUser.role === UserRole.GENERAL_MANAGER && (
                   <TrashBin 
                     items={useApp().trashBin} 

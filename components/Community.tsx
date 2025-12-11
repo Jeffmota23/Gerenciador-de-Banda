@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { PostItem, User, Comment } from '../types';
-import { Heart, MessageCircle, Share2, Video, UserPlus, Check, Sparkles, Music, Lock, MapPin, Plus, Mic, Send, Smile, MoreHorizontal, Edit2, Trash2, CornerDownRight, Link as LinkIcon, CheckCircle2, Repeat, ExternalLink, X, AlertTriangle, Search, UserCheck, Users, Filter } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Video, UserPlus, Check, Sparkles, Music, Lock, MapPin, Plus, Mic, Send, Smile, MoreHorizontal, Edit2, Trash2, CornerDownRight, Link as LinkIcon, CheckCircle2, Repeat, ExternalLink, X, AlertTriangle, Search, UserCheck, Users, Filter, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 import { CreatePostModal } from './CreatePostModal';
 import { useApp } from '../App';
 
@@ -12,6 +12,114 @@ interface Props {
   onToggleFollow: (id: string) => void;
   onAddPost?: (post: any) => void; 
 }
+
+// --- HELPER COMPONENTS ---
+
+// 1. Lightbox (Visualizador em Tela Cheia)
+const Lightbox = ({ imageUrl, onClose }: { imageUrl: string, onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+            <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors z-50">
+                <X className="w-8 h-8" />
+            </button>
+            <img src={imageUrl} alt="Full size" className="max-w-full max-h-full object-contain rounded-sm shadow-2xl pointer-events-auto" onClick={(e) => e.stopPropagation()} />
+        </div>
+    );
+};
+
+// 2. Expandable Text (Leia Mais)
+const ExpandableText = ({ content }: { content: string }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const limit = 100;
+    
+    if (content.length <= limit) {
+        return <p className="text-bege-100 mb-4 whitespace-pre-wrap">{content}</p>;
+    }
+
+    return (
+        <div className="mb-4">
+            <p className="text-bege-100 whitespace-pre-wrap">
+                {isExpanded ? content : content.slice(0, limit) + '...'}
+            </p>
+            <button 
+                onClick={() => setIsExpanded(!isExpanded)} 
+                className="text-ocre-500 font-bold italic text-sm mt-1 hover:underline"
+            >
+                {isExpanded ? 'Ler menos' : 'Leia mais'}
+            </button>
+        </div>
+    );
+};
+
+// 3. Robust Image Carousel
+const ImageCarousel = ({ images, onImageClick }: { images: string[], onImageClick: (url: string) => void }) => {
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    const next = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveIndex((prev) => (prev + 1) % images.length);
+    };
+
+    const prev = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setActiveIndex((prev) => (prev - 1 + images.length) % images.length);
+    };
+
+    if (images.length === 0) return null;
+
+    return (
+        <div className="mt-2 rounded-xl overflow-hidden border border-navy-600 relative group bg-black aspect-video md:aspect-[16/9] lg:aspect-[2/1]">
+            <img 
+                src={images[activeIndex]} 
+                alt={`Slide ${activeIndex}`}
+                className="w-full h-full object-contain cursor-pointer transition-opacity duration-300"
+                onClick={() => onImageClick(images[activeIndex])}
+            />
+            
+            {/* Overlay Gradient for controls visibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+
+            {images.length > 1 && (
+                <>
+                    <button 
+                        onClick={prev}
+                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button 
+                        onClick={next}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
+                    >
+                        <ChevronRight className="w-5 h-5" />
+                    </button>
+                    
+                    {/* Dots Indicator */}
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                        {images.map((_, idx) => (
+                            <div 
+                                key={idx} 
+                                className={`w-1.5 h-1.5 rounded-full transition-all ${idx === activeIndex ? 'bg-white scale-125' : 'bg-white/40'}`}
+                            ></div>
+                        ))}
+                    </div>
+                    
+                    {/* Counter Badge */}
+                    <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full font-bold backdrop-blur-sm">
+                        {activeIndex + 1}/{images.length}
+                    </div>
+                </>
+            )}
+            
+             <button 
+                className="absolute bottom-3 right-3 p-1.5 bg-black/40 rounded text-white opacity-0 group-hover:opacity-100 hover:bg-black/60 transition-all"
+                onClick={(e) => { e.stopPropagation(); onImageClick(images[activeIndex]); }}
+            >
+                <Maximize2 className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
 
 // Helper Emojis
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '👏', '🎺', '🎷', '🥁', '🎵', '🎼', '🔥'];
@@ -188,6 +296,7 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false); // Mobile Search State
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeShareMenuId, setActiveShareMenuId] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -421,14 +530,12 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
                 <h4 className={`font-bold ${isNested ? 'text-sm' : 'text-lg'} text-bege-50 mb-2`}>{post.title}</h4>
             )}
 
-            <p className={`text-bege-100 ${isNested ? 'text-xs line-clamp-3' : 'mb-4'} whitespace-pre-wrap`}>{post.content}</p>
+            {/* EXPANDABLE TEXT COMPONENT (REPLACING PLAIN TEXT) */}
+            <ExpandableText content={post.content || ''} />
             
+            {/* CAROUSEL COMPONENT (REPLACING PLAIN GRID) */}
             {post.mediaUrls && post.mediaUrls.length > 0 && (
-                <div className={`grid gap-2 ${post.mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} mt-2`}>
-                    {post.mediaUrls.map((url, i) => (
-                        <img key={i} src={url} className={`rounded-lg w-full ${isNested ? 'h-32' : 'h-48'} object-cover border border-navy-600`} />
-                    ))}
-                </div>
+                <ImageCarousel images={post.mediaUrls} onImageClick={setLightboxImage} />
             )}
 
             {post.videoUrl && (
@@ -461,6 +568,11 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
   return (
     <div className="max-w-6xl mx-auto mb-20 animate-fade-in relative">
       
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+          <Lightbox imageUrl={lightboxImage} onClose={() => setLightboxImage(null)} />
+      )}
+
       {showShareToast && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-in">
               <div className="bg-ocre-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 text-sm font-bold border border-white/20">
@@ -595,7 +707,7 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
 
                     <div className="p-4">
                       {isShare && post.content && (
-                          <p className="text-bege-100 mb-4 whitespace-pre-wrap">{post.content}</p>
+                          <ExpandableText content={post.content} />
                       )}
 
                       {isShare ? (
