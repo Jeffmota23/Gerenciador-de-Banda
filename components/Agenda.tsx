@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { EventItem, EventType, User, UserRole, AttendanceStatus, AttendanceRecord, LocationData, RepertoireCategory } from '../types';
-import { Calendar, Clock, MapPin, Plus, Music, Star, BookOpen, Bus, Hammer, AlertCircle, Check, X, Printer, Link as LinkIcon, Users, AlertTriangle, UserCheck, User as UserIcon, Wand2, GraduationCap, ArrowRight, Zap, PartyPopper, Heart, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Calendar, Clock, MapPin, Plus, Music, Star, BookOpen, Bus, Hammer, AlertCircle, Check, X, Printer, Link as LinkIcon, Users, AlertTriangle, UserCheck, User as UserIcon, Wand2, GraduationCap, ArrowRight, Zap, PartyPopper, Heart, ThumbsDown, ThumbsUp, Globe } from 'lucide-react';
 import { useApp } from '../App'; 
 import { LocationPicker } from './LocationPicker';
 import { XP_MATRIX } from '../constants';
@@ -40,8 +40,14 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
   const [title, setTitle] = useState('');
   const [selectedType, setSelectedType] = useState<EventType>(EventType.REHEARSAL);
   
+  // Form Error State (Validation Feedback)
+  const [formError, setFormError] = useState<string | null>(null);
+  
   // Study Specific State
   const [isIndividualStudy, setIsIndividualStudy] = useState(false);
+
+  // Performance/Travel Specific State
+  const [isExternalEvent, setIsExternalEvent] = useState(false);
 
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -153,7 +159,73 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
 
 
   const handleSubmit = () => {
-    if (!title || !date || !time || !deadlineDate) return alert("Por favor preencha todos os campos.");
+    setFormError(null); // Clear previous errors
+
+    if (!title || !date || !time || !deadlineDate) {
+        setFormError("Por favor preencha todos os campos obrigatórios.");
+        return;
+    }
+
+    // --- DATE VALIDATION LOGIC ---
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to start of day
+
+    // Fix timezone issues by creating date from string parts
+    const [year, month, day] = date.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day); 
+    targetDate.setHours(0, 0, 0, 0);
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const diffDays = (targetDate.getTime() - today.getTime()) / msPerDay;
+
+    // Rule 1: No retroactive dates
+    if (diffDays < 0) {
+        setFormError("Erro de Data: Não é permitido criar agendas com data retroativa. Por favor, selecione uma data futura.");
+        return;
+    }
+
+    // Rule 2: Performance/Travel (Local vs External)
+    if (selectedType === EventType.PERFORMANCE || selectedType === EventType.TRAVEL) {
+        if (isExternalEvent) {
+            // Rule: External = Min 15 days
+            if (diffDays < 15) {
+                setFormError("Regra de Logística: Apresentações ou Viagens fora da cidade sede exigem no mínimo 15 dias de antecedência para organização.");
+                return;
+            }
+        } else {
+            // Rule: Local = Min 7 days
+            if (diffDays < 7) {
+                setFormError("Regra de Organização: Apresentações ou Eventos na cidade sede exigem no mínimo 7 dias de antecedência.");
+                return;
+            }
+        }
+    }
+
+    // Rule 3: Group Study (Min 3 days)
+    if (selectedType === EventType.STUDY && !isIndividualStudy) {
+        if (diffDays < 3) {
+            setFormError("Regra de Preparação: Estudos em Grupo (Naipe) exigem no mínimo 3 dias de antecedência para estudo individual prévio.");
+            return;
+        }
+    }
+
+    // Rule 4: Social/Resenha (Min 2 days)
+    if (selectedType === EventType.SOCIAL) {
+        if (diffDays < 2) {
+            setFormError("Regra Social: Resenhas exigem no mínimo 2 dias de antecedência.");
+            return;
+        }
+    }
+
+    // Rule 5: Workshop (Min 5 days)
+    if (selectedType === EventType.WORKSHOP) {
+        if (diffDays < 5) {
+            setFormError("Regra de Divulgação: Workshops exigem no mínimo 5 dias de antecedência.");
+            return;
+        }
+    }
+
+    // --- END VALIDATION ---
 
     const givesXp = [
         EventType.REHEARSAL, 
@@ -209,6 +281,8 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
     setDuration(120);
     setIsIndividualStudy(false);
     setIsDurationAutoFilled(false);
+    setIsExternalEvent(false);
+    setFormError(null);
   };
 
   // Effect to update title if mode changes while material is selected
@@ -792,6 +866,26 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                         </div>
                     </div>
 
+                    {/* LOCATION SCOPE TOGGLE (For Performance/Travel) */}
+                    {(selectedType === EventType.PERFORMANCE || selectedType === EventType.TRAVEL) && (
+                        <div className="bg-navy-900 p-3 rounded-lg border border-navy-700 flex items-center gap-3 animate-fade-in">
+                            <label className="flex items-center gap-2 cursor-pointer w-full text-sm text-bege-100">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isExternalEvent} 
+                                    onChange={(e) => setIsExternalEvent(e.target.checked)}
+                                    className="w-4 h-4 accent-ocre-500"
+                                />
+                                <div className="flex-1">
+                                    <span className="font-bold flex items-center gap-2">
+                                        <Globe className="w-4 h-4 text-ocre-400" /> Evento fora da cidade sede?
+                                    </span>
+                                    <p className="text-[10px] text-gray-400">Exige antecedência mínima de 15 dias.</p>
+                                </div>
+                            </label>
+                        </div>
+                    )}
+
                     {/* STUDY MODE TOGGLE & MATERIAL LINK */}
                     {selectedType === EventType.STUDY && (
                        <div className="bg-navy-900 p-4 rounded-lg border border-navy-700 space-y-4 animate-fade-in">
@@ -921,6 +1015,14 @@ export const Agenda: React.FC<Props> = ({ events, currentUser, allUsers, onAddEv
                               value={deadlineDate} onChange={e => setDeadlineDate(e.target.value)}
                         />
                     </div>
+                    
+                    {/* Error Display */}
+                    {formError && (
+                        <div className="bg-red-900/30 border border-red-500/50 text-red-200 p-3 rounded-lg flex items-start gap-3 animate-fade-in">
+                            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" />
+                            <span className="text-xs font-bold">{formError}</span>
+                        </div>
+                    )}
 
                  </div>
 

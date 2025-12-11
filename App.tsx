@@ -549,14 +549,16 @@ export const useApp = () => {
   return context;
 };
 
-// Main App Component with Routing
-const MainApp = () => {
+// Authenticated App (Session Isolated)
+const AuthenticatedApp = () => {
   const { currentUser, setCurrentUser, users, addPost, sharePost, posts, events, repertoire, finances, notificationPermission, requestNotificationPermission } = useApp();
   const location = useLocation();
 
-  // --- VIEW HISTORY STATE FOR BADGES (PER USER PERSISTENCE) ---
-  
-  // 1. Define default logic (Past date so content appears new for fresh users)
+  if (!currentUser) return null; // Safety check
+
+  const isManager = currentUser.role !== UserRole.MEMBER;
+
+  // --- VIEW HISTORY STATE (Unique per User ID via Component Remount) ---
   const getDefaultHistory = () => ({
     wall: Date.now() - (24 * 60 * 60 * 1000), 
     community: Date.now() - (24 * 60 * 60 * 1000),
@@ -564,61 +566,54 @@ const MainApp = () => {
     repertoire: Date.now() - (48 * 60 * 60 * 1000),
     finances: Date.now() - (24 * 60 * 60 * 1000),
     admin: Date.now() - (24 * 60 * 60 * 1000),
-    profile: Date.now()
+    profile: Date.now(),
+    lastSeenLevel: currentUser.level, // Init defaults to current to avoid false alert on first login
+    lastSeenRole: currentUser.role
   });
 
-  // 2. Initialize State loading from localStorage if User is present
-  const [viewHistory, setViewHistory] = useState(getDefaultHistory());
+  // Lazy Initialization: Loads strictly for this currentUser.id on mount
+  const [viewHistory, setViewHistory] = useState(() => {
+      const storageKey = `bandSocial_viewHistory_${currentUser.id}`;
+      const saved = localStorage.getItem(storageKey);
+      
+      let history = saved ? JSON.parse(saved) : getDefaultHistory();
+      
+      // MIGRATION: Ensure new fields exist if loading old data structure
+      if (history.lastSeenLevel === undefined) history.lastSeenLevel = currentUser.level;
+      if (history.lastSeenRole === undefined) history.lastSeenRole = currentUser.role;
+      
+      return history;
+  });
 
-  // 3. Effect: When User changes, load THEIR history from storage
+  // Effect: Sync state to LocalStorage whenever it changes
   useEffect(() => {
-    if (currentUser) {
-        const storageKey = `bandSocial_viewHistory_${currentUser.id}`;
-        const savedHistory = localStorage.getItem(storageKey);
-        
-        if (savedHistory) {
-            try {
-                setViewHistory(JSON.parse(savedHistory));
-            } catch (e) {
-                console.error("Failed to parse history", e);
-                setViewHistory(getDefaultHistory());
-            }
-        } else {
-            // New user on this device -> default state
-            const def = getDefaultHistory();
-            setViewHistory(def);
-            localStorage.setItem(storageKey, JSON.stringify(def));
-        }
-    }
-  }, [currentUser?.id]);
+      localStorage.setItem(`bandSocial_viewHistory_${currentUser.id}`, JSON.stringify(viewHistory));
+  }, [viewHistory, currentUser.id]);
 
-  // 4. Effect: When Route changes, update State AND LocalStorage for current user
+  // Effect: Update state based on current route
   useEffect(() => {
-    if (!currentUser) return;
-
     const now = Date.now();
-    let updatedHistory = { ...viewHistory };
-    let changed = false;
-
-    if (location.pathname === '/wall') { updatedHistory.wall = now; changed = true; }
-    if (location.pathname === '/people') { updatedHistory.community = now; changed = true; }
-    if (location.pathname === '/agenda') { updatedHistory.agenda = now; changed = true; }
-    if (location.pathname === '/repertoire') { updatedHistory.repertoire = now; changed = true; }
-    if (location.pathname === '/finances') { updatedHistory.finances = now; changed = true; }
-    if (location.pathname === '/admin') { updatedHistory.admin = now; changed = true; }
-    if (location.pathname === '/profile') { updatedHistory.profile = now; changed = true; }
-
-    if (changed) {
-        setViewHistory(updatedHistory);
-        localStorage.setItem(`bandSocial_viewHistory_${currentUser.id}`, JSON.stringify(updatedHistory));
-    }
-  }, [location.pathname, currentUser]); // Depend on currentUser to ensure we write to correct key
-
-  if (!currentUser) {
-    return <AuthScreen onLogin={setCurrentUser} />;
-  }
-
-  const isManager = currentUser.role !== UserRole.MEMBER;
+    setViewHistory(prev => {
+        let update = null;
+        if (location.pathname === '/wall') update = { wall: now };
+        if (location.pathname === '/people') update = { community: now };
+        if (location.pathname === '/agenda') update = { agenda: now };
+        if (location.pathname === '/repertoire') update = { repertoire: now };
+        if (location.pathname === '/finances') update = { finances: now };
+        if (location.pathname === '/admin') update = { admin: now };
+        
+        // SPECIAL: Visiting Profile clears the Level/Role alert
+        if (location.pathname === '/profile') {
+            update = { 
+                profile: now,
+                lastSeenLevel: currentUser.level,
+                lastSeenRole: currentUser.role
+            };
+        }
+        
+        return update ? { ...prev, ...update } : prev;
+    });
+  }, [location.pathname, currentUser.level, currentUser.role]);
 
   const handleStudioPost = (content: string, videoBlob: Blob, visibility: 'PUBLIC' | 'FOLLOWERS', location?: LocationData) => {
     const videoUrl = URL.createObjectURL(videoBlob);
@@ -634,9 +629,11 @@ const MainApp = () => {
     });
   };
 
-  // --- NOTIFICATION BADGE LOGIC (Based on Last Visit) ---
+  // --- NOTIFICATION BADGE LOGIC ---
   
-  // Mural: New official posts (no reposts/confirmation spam) created AFTER last visit
+  // Specific Logic for Profile/Admin Icon: Only for Level or Role changes
+  const hasProfileAlerts = currentUser.level !== viewHistory.lastSeenLevel || currentUser.role !== viewHistory.lastSeenRole;
+
   const hasWallUpdates = posts.some(p => 
       p.type === 'POST' && 
       p.category === 'WALL' &&
@@ -645,27 +642,19 @@ const MainApp = () => {
       p.createdAt > viewHistory.wall
   );
 
-  // Community: New interactions created AFTER last visit
   const hasCommunityUpdates = posts.some(p => 
      p.type === 'POST' && 
      p.category === 'COMMUNITY' &&
      p.createdAt > viewHistory.community
   );
 
-  // Agenda: New Events created AFTER last visit (regardless of RSVP, simply "New Event Available")
   const hasPendingEvents = events.some(e => {
-      // Logic: Show badge if event was created AFTER I last visited the agenda tab.
       return e.createdAt > viewHistory.agenda;
   });
 
-  // Repertoire: Recently added items AFTER last visit
   const hasNewRepertoire = repertoire.some(r => r.createdAt > viewHistory.repertoire);
-
-  // Finances: Pending items created AFTER last visit
   const hasPendingFinances = finances.some(f => f.status === 'PENDING' && f.createdAt > viewHistory.finances);
-
-  // Admin/Profile
-  const hasAdminAlerts = isManager && finances.some(f => f.status === 'PENDING' && f.createdAt > viewHistory.admin);
+  // Removed hasAdminAlerts for finances to comply with user request for the icon behavior
 
   return (
     <div className="min-h-screen bg-navy-900 text-bege-100 font-sans pb-20 relative">
@@ -690,7 +679,7 @@ const MainApp = () => {
                         Permitir
                      </button>
                      <button 
-                        onClick={() => { /* Simple dismiss, keeps it 'default' but hides visually for session? Or better, sets 'denied' conceptually in local state? For now, standard behavior */}}
+                        onClick={() => { /* Dismiss logic */}}
                         className="text-xs text-gray-500 hover:text-white"
                      >
                         Agora não
@@ -720,8 +709,8 @@ const MainApp = () => {
             <p className="text-[10px] font-bold text-bege-50 leading-none">{currentUser.name.split(' ')[0]}</p>
             <p className="text-[8px] text-ocre-500 font-bold uppercase">{currentUser.role.split('_')[0]}</p>
           </div>
-          {/* Profile Badge (Mini) */}
-          {hasAdminAlerts && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>}
+          {/* HEADER PROFILE ALERT: Only for Rank/Role changes */}
+          {hasProfileAlerts && <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-navy-900 animate-pulse"></div>}
         </Link>
       </header>
 
@@ -782,7 +771,6 @@ const MainApp = () => {
           <Route path="/profile" element={
             <div className="space-y-8">
                <Profile user={currentUser} onLogout={() => setCurrentUser(null)} />
-               {/* Trash Bin embedded in Profile for Managers */}
                {currentUser.role === UserRole.GENERAL_MANAGER && (
                   <TrashBin 
                     items={useApp().trashBin} 
@@ -796,7 +784,6 @@ const MainApp = () => {
         </Routes>
       </main>
 
-      {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-navy-900/95 backdrop-blur-lg border-t border-navy-800 pb-safe z-50">
         <div className="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
           <NavLink to="/wall" icon={<LayoutDashboard />} label="Mural" hasNotification={hasWallUpdates} />
@@ -812,15 +799,14 @@ const MainApp = () => {
           <NavLink to="/repertoire" icon={<LibraryBig />} label="Arquivo" hasNotification={hasNewRepertoire} />
           <NavLink to="/finances" icon={<Landmark />} label="Caixa" hasNotification={hasPendingFinances} />
           
-          {/* Admin Link for General Manager OR People Managers */}
+          {/* BOTTOM NAV ALERT: Only for Rank/Role changes, per user request */}
           {[UserRole.GENERAL_MANAGER, UserRole.PEOPLE_MANAGER_1, UserRole.PEOPLE_MANAGER_2].includes(currentUser.role) ? (
-             <NavLink to="/admin" icon={<ShieldAlert />} label="Admin" activeColor="text-red-500" hasNotification={hasAdminAlerts} />
+             <NavLink to="/admin" icon={<ShieldAlert />} label="Admin" activeColor="text-red-500" hasNotification={hasProfileAlerts} />
           ) : (
-             <NavLink to="/profile" icon={<Settings />} label="Perfil" hasNotification={hasAdminAlerts} />
+             <NavLink to="/profile" icon={<Settings />} label="Perfil" hasNotification={hasProfileAlerts} />
           )}
         </div>
       </nav>
-
     </div>
   );
 };
@@ -840,6 +826,18 @@ const NavLink = ({ to, icon, label, activeColor = 'text-ocre-500', hasNotificati
       <span className={`text-[9px] font-bold ${isActive ? 'opacity-100' : 'opacity-60'}`}>{label}</span>
     </Link>
   );
+};
+
+// Main App Container (Authentication Switcher)
+const MainApp = () => {
+  const { currentUser, setCurrentUser } = useApp();
+
+  if (!currentUser) {
+    return <AuthScreen onLogin={setCurrentUser} />;
+  }
+
+  // Key ensures complete unmount/remount when user ID changes, solving the state persistence issue.
+  return <AuthenticatedApp key={currentUser.id} />;
 };
 
 export default function App() {
