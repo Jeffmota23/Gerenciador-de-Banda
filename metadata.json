@@ -1,0 +1,8 @@
+{
+  "name": "BandSocial Manager",
+  "description": "A social-first management platform for Brass Bands with strict RBAC and audit restoration capabilities.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
