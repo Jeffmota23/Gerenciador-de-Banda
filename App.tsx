@@ -458,6 +458,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const handleEventAction = (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL' | 'DECLINE', reason?: string) => {
     setEvents(prevEvents => prevEvents.map(event => {
        if (event.id !== eventId) return event;
+       // Logic for locking actions if finalized could be here, but usually finalizing affects MANAGER marking, not user RSVP unless strict.
+       // However, for strict consistency:
+       if (event.attendanceFinalized) return event; 
 
        const record = event.attendees.find(a => a.userId === userId);
        const matrix = XP_MATRIX[event.eventType] || { confirm: 20, completion: 30 }; 
@@ -538,6 +541,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const markAttendance = (eventId: string, userId: string, status: AttendanceStatus.PRESENT | AttendanceStatus.ABSENT) => {
       setEvents(prevEvents => prevEvents.map(event => {
           if (event.id !== eventId) return event;
+          if (event.attendanceFinalized) return event; // Lock check
 
           const record = event.attendees.find(a => a.userId === userId);
           if (!record) return event; 
@@ -563,6 +567,42 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
           return { ...event, attendees: newAttendees };
       }));
+  };
+
+  const markBatchAttendance = (eventId: string, userIds: string[], status: AttendanceStatus.PRESENT) => {
+    setEvents(prevEvents => prevEvents.map(event => {
+        if (event.id !== eventId) return event;
+        if (event.attendanceFinalized) return event; 
+
+        const matrix = XP_MATRIX[event.eventType] || { confirm: 20, completion: 30 };
+        
+        let updatedAttendees = event.attendees.map(record => {
+            if (userIds.includes(record.userId)) {
+                // Logic same as markAttendance but inside loop
+                const prevXp = record.xpAwarded;
+                const newXp = matrix.confirm + matrix.completion; // Assuming PRESENT
+                const correction = newXp - prevXp;
+                applyXpChange(record.userId, correction);
+                
+                return {
+                    ...record,
+                    status: AttendanceStatus.PRESENT,
+                    xpAwarded: newXp
+                };
+            }
+            return record;
+        });
+
+        return { ...event, attendees: updatedAttendees };
+    }));
+  };
+
+  const finalizeAttendanceList = (eventId: string) => {
+      setEvents(prev => prev.map(e => e.id === eventId ? { ...e, attendanceFinalized: true, attendanceFinalizedAt: Date.now() } : e));
+  };
+
+  const reopenAttendanceList = (eventId: string) => {
+      setEvents(prev => prev.map(e => e.id === eventId ? { ...e, attendanceFinalized: false } : e));
   };
 
   const toggleFollow = (targetId: string) => {
@@ -593,13 +633,28 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setCurrentUser(newUser); 
   };
 
+  const updateUserRole = (userId: string, newRole: UserRole) => {
+      // 1. Update Global List
+      setAllUsers(prev => prev.map(u => {
+          if (u.id === userId) {
+              return { ...u, role: newRole };
+          }
+          return u;
+      }));
+
+      // 2. Update Current User if applicable (Prevent Stale State)
+      if (currentUser && currentUser.id === userId) {
+          setCurrentUser({ ...currentUser, role: newRole });
+      }
+  };
+
   return (
     <AppContext.Provider value={{
       currentUser, users: allUsers, repertoire, trashBin, posts, finances, events, newsSources, userSettings,
       setCurrentUser, deleteItem, restoreItem, addRepertoire, addPost, sharePost, votePoll, toggleFinanceApproval, addEvent,
-      handleEventAction, markAttendance, toggleFollow, addNewsSource,
+      handleEventAction, markAttendance, markBatchAttendance, finalizeAttendanceList, reopenAttendanceList, toggleFollow, addNewsSource,
       togglePostLike, addComment, editComment, deleteComment, toggleCommentLike,
-      notificationPermission, requestNotificationPermission, registerUser, updateSettings,
+      notificationPermission, requestNotificationPermission, registerUser, updateSettings, updateUserRole,
       // PWA
       isPwaInstallable: !!deferredPrompt,
       installPwa,
@@ -855,6 +910,10 @@ const AuthenticatedApp = () => {
                 events={useApp().events}
                 onAddNewsSource={useApp().addNewsSource}
                 onMarkAttendance={useApp().markAttendance}
+                onFinalize={useApp().finalizeAttendanceList}
+                onReopen={useApp().reopenAttendanceList}
+                onMarkBatch={useApp().markBatchAttendance}
+                onUpdateUserRole={useApp().updateUserRole}
              />
           } />
           <Route path="/profile" element={

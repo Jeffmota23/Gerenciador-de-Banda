@@ -113,6 +113,10 @@ export interface EventItem extends BaseItem {
   
   givesXp: boolean;
   linkedMaterialIds?: string[];
+
+  // Attendance Lifecycle
+  attendanceFinalized?: boolean;
+  attendanceFinalizedAt?: number;
 }
 
 export interface RepertoireItem extends BaseItem {
@@ -250,7 +254,12 @@ export interface AppContextType extends AppState {
   
   handleEventAction: (eventId: string, userId: string, action: 'CONFIRM' | 'CANCEL' | 'DECLINE', reason?: string) => void;
   markAttendance: (eventId: string, userId: string, status: AttendanceStatus.PRESENT | AttendanceStatus.ABSENT) => void;
+  markBatchAttendance: (eventId: string, userIds: string[], status: AttendanceStatus.PRESENT) => void;
   
+  // Attendance Lifecycle
+  finalizeAttendanceList: (eventId: string) => void;
+  reopenAttendanceList: (eventId: string) => void;
+
   toggleFollow: (targetUserId: string) => void;
   addNewsSource: (source: Omit<NewsSource, 'id' | 'status'>) => void;
 
@@ -265,6 +274,7 @@ export interface AppContextType extends AppState {
   
   registerUser: (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => void;
   updateSettings: (newSettings: Partial<UserSettings>) => void;
+  updateUserRole: (userId: string, newRole: UserRole) => void;
 
   // PWA Support
   isPwaInstallable: boolean;
