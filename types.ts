@@ -204,6 +204,27 @@ export interface DeletedItem {
   expiresAt: number; 
 }
 
+export interface UserSettings {
+  notifications: {
+    push: boolean;
+    email: boolean;
+    events: boolean;
+    community: boolean;
+  };
+  privacy: {
+    profileVisibility: 'PUBLIC' | 'FOLLOWERS';
+    onlineStatus: boolean;
+  };
+  accessibility: {
+    highContrast: boolean;
+    largeText: boolean;
+  };
+  security: {
+    biometrics: boolean;
+    twoFactor: boolean;
+  };
+}
+
 export interface AppState {
   currentUser: User | null;
   users: User[]; 
@@ -213,6 +234,7 @@ export interface AppState {
   finances: FinanceItem[];
   events: EventItem[];
   newsSources: NewsSource[];
+  userSettings: UserSettings; // Global Settings
 }
 
 export interface AppContextType extends AppState {
@@ -221,7 +243,7 @@ export interface AppContextType extends AppState {
   restoreItem: (itemId: string) => void;
   addRepertoire: (item: Omit<RepertoireItem, 'id' | 'createdAt' | 'authorId' | 'type'>) => void;
   addPost: (post: Omit<PostItem, 'id' | 'createdAt' | 'authorId' | 'type' | 'likedBy' | 'comments'>) => void;
-  sharePost: (originalPostId: string, commentary?: string) => void; // NEW
+  sharePost: (originalPostId: string, commentary?: string) => void; 
   votePoll: (postId: string, optionId: string) => void; 
   toggleFinanceApproval: (id: string) => void;
   addEvent: (event: Omit<EventItem, 'id' | 'createdAt' | 'authorId' | 'type' | 'attendees'> & { attendees?: AttendanceRecord[] }) => void;
@@ -232,17 +254,17 @@ export interface AppContextType extends AppState {
   toggleFollow: (targetUserId: string) => void;
   addNewsSource: (source: Omit<NewsSource, 'id' | 'status'>) => void;
 
-  // NEW INTERACTION HANDLERS
   togglePostLike: (postId: string) => void;
   addComment: (postId: string, content: string, parentCommentId?: string) => void;
   editComment: (postId: string, commentId: string, newContent: string) => void;
   deleteComment: (postId: string, commentId: string) => void;
   toggleCommentLike: (postId: string, commentId: string) => void;
 
-  // SYSTEM NOTIFICATIONS
   notificationPermission: NotificationPermission;
   requestNotificationPermission: () => Promise<void>;
   
-  // NEW: Register User
   registerUser: (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => void;
+  
+  // NEW: Update Settings
+  updateSettings: (newSettings: Partial<UserSettings>) => void;
 }

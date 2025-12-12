@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { PostItem, User, Comment } from '../types';
 import { Heart, MessageCircle, Share2, Video, UserPlus, Check, Sparkles, Music, Lock, MapPin, Plus, Mic, Send, Smile, MoreHorizontal, Edit2, Trash2, CornerDownRight, Link as LinkIcon, CheckCircle2, Repeat, ExternalLink, X, AlertTriangle, Search, UserCheck, Users, Filter, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
@@ -162,7 +161,7 @@ const CommentSection = ({ post, currentUser }: { post: PostItem, currentUser: Us
       setInputContent(prev => prev + emoji);
   };
 
-  const CommentItem = ({ comment, depth = 0 }: { comment: Comment, depth?: number }) => {
+  const CommentItem: React.FC<{ comment: Comment, depth?: number }> = ({ comment, depth = 0 }) => {
       const isAuthor = comment.authorId === currentUser.id;
       const canEdit = isAuthor && (Date.now() - comment.createdAt < 8 * 60 * 60 * 1000); // 8 hours
       const hasLiked = comment.likedBy.includes(currentUser.id);
@@ -399,7 +398,7 @@ export const Community: React.FC<Props> = ({ posts, currentUser, allUsers, onTog
   }, [currentUser, allUsers]);
 
   // --- SUB-COMPONENT: USER CARD ---
-  const UserCard = ({ user, reasons, isResult = false }: { user: User, reasons?: string[], isResult?: boolean }) => {
+  const UserCard: React.FC<{ user: User, reasons?: string[], isResult?: boolean }> = ({ user, reasons, isResult = false }) => {
       const isFollowing = currentUser.following.includes(user.id);
       
       return (

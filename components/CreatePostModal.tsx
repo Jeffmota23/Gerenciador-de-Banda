@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { User, LocationData } from '../types';
 import { X, Image as ImageIcon, Video, Mic, MapPin, Hash, AtSign, Send, Camera, Trash2, StopCircle, Play, AlertCircle, Plus } from 'lucide-react';
@@ -33,7 +32,7 @@ export const CreatePostModal: React.FC<Props> = ({ currentUser, onClose, onSubmi
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'IMAGE' | 'VIDEO') => {
     if (e.target.files) {
-      const newFiles = Array.from(e.target.files);
+      const newFiles = Array.from(e.target.files) as File[];
       const currentCount = mediaFiles.length;
       
       if (currentCount + newFiles.length > MAX_IMAGES) {

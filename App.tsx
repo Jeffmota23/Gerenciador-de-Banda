@@ -3,7 +3,7 @@ import React, { useState, createContext, useContext, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { 
   UserRole, User, RepertoireItem, ItemType, DeletedItem, PostItem, FinanceItem, EventItem,
-  AppContextType, AttendanceStatus, AttendanceRecord, NewsSource, EventType, Comment, LocationData
+  AppContextType, AttendanceStatus, AttendanceRecord, NewsSource, EventType, Comment, LocationData, UserSettings
 } from './types';
 import { MOCK_USERS, INITIAL_REPERTOIRE, SEVEN_DAYS_MS, MOCK_FINANCES, INITIAL_EVENTS, XP_MATRIX, INITIAL_POSTS } from './constants';
 import { TrashBin } from './components/TrashBin';
@@ -16,12 +16,34 @@ import { Agenda } from './components/Agenda';
 import { Wall } from './components/Wall'; 
 import { AdminPanel } from './components/AdminPanel';
 import { AuthScreen } from './components/AuthScreen';
+import { SettingsScreen } from './components/SettingsScreen';
 import { 
   LayoutDashboard, Users, Calendar, LibraryBig, 
   Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check, Bell, BellRing
 } from 'lucide-react';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const DEFAULT_SETTINGS: UserSettings = {
+  notifications: {
+    push: true,
+    email: true,
+    events: true,
+    community: true
+  },
+  privacy: {
+    profileVisibility: 'PUBLIC',
+    onlineStatus: true
+  },
+  accessibility: {
+    highContrast: false,
+    largeText: false
+  },
+  security: {
+    biometrics: false,
+    twoFactor: false
+  }
+};
 
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -32,6 +54,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [finances, setFinances] = useState<FinanceItem[]>(MOCK_FINANCES);
   const [events, setEvents] = useState<EventItem[]>(INITIAL_EVENTS);
   const [newsSources, setNewsSources] = useState<NewsSource[]>([]);
+  const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   
   // --- BROWSER NOTIFICATION STATE ---
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
@@ -43,6 +66,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setAllUsers(prev => prev.map(u => u.id === currentUser.id ? currentUser : u));
     }
   }, [currentUser]);
+
+  const updateSettings = (newSettings: Partial<UserSettings>) => {
+      setUserSettings(prev => ({ ...prev, ...newSettings }));
+  };
 
   // --- NOTIFICATION UTILS ---
   const requestNotificationPermission = async () => {
@@ -58,11 +85,12 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             body: "Você será avisado sobre novas postagens e eventos da banda.",
             icon: "https://cdn-icons-png.flaticon.com/512/3659/3659784.png" // Generic music icon
         });
+        updateSettings({ notifications: { ...userSettings.notifications, push: true } });
     }
   };
 
   const sendSystemNotification = (title: string, body: string) => {
-      if (notificationPermission === 'granted') {
+      if (notificationPermission === 'granted' && userSettings.notifications.push) {
           try {
               new Notification(title, { 
                   body,
@@ -165,9 +193,11 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     
     // Notification logic
     const isOfficial = post.category === 'WALL'; // Official if explicitly marked as WALL
-    const notifTitle = isOfficial ? "Atualização no Mural" : "Nova Publicação";
-    const notifBody = post.title || `Novo post de ${currentUser.name}`;
-    sendSystemNotification(notifTitle, notifBody);
+    if (isOfficial && userSettings.notifications.events) {
+        sendSystemNotification("Atualização no Mural", post.title || `Novo post de ${currentUser.name}`);
+    } else if (!isOfficial && userSettings.notifications.community) {
+        sendSystemNotification("Nova Publicação", `Novo post de ${currentUser.name}`);
+    }
   };
 
   // --- NEW: SHARE POST LOGIC ---
@@ -195,7 +225,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     };
 
     setPosts(prev => [newPost, ...prev]);
-    sendSystemNotification("Compartilhamento", `${currentUser.name} compartilhou uma publicação.`);
+    if (userSettings.notifications.community) {
+        sendSystemNotification("Compartilhamento", `${currentUser.name} compartilhou uma publicação.`);
+    }
   };
 
   // --- SOCIAL INTERACTIONS START ---
@@ -352,8 +384,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const addEvent = (eventData: any) => {
     if (!currentUser) return;
     
-    // Check if there are initial attendees (e.g., Creator auto-confirm for Individual Study)
-    // and apply XP immediately.
     if (eventData.attendees && eventData.attendees.length > 0) {
         eventData.attendees.forEach((att: AttendanceRecord) => {
             if (att.xpAwarded > 0) {
@@ -368,10 +398,12 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       type: ItemType.EVENT,
       createdAt: Date.now(),
       authorId: currentUser.id,
-      attendees: eventData.attendees || [] // Use passed attendees, don't overwrite
+      attendees: eventData.attendees || [] 
     };
     setEvents(prev => [...prev, newEvent]);
-    sendSystemNotification("Novo Evento na Agenda", `${newEvent.title} - ${new Date(newEvent.date).toLocaleDateString()}`);
+    if (userSettings.notifications.events) {
+        sendSystemNotification("Novo Evento na Agenda", `${newEvent.title} - ${new Date(newEvent.date).toLocaleDateString()}`);
+    }
   };
 
   const addNewsSource = (source: any) => {
@@ -393,15 +425,11 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
        let newAttendees = [...event.attendees];
 
        if (action === 'CONFIRM') {
-           // Rule: Confirm adds +20 (matrix.confirm)
            const isAlreadyConfirmed = record && record.status === AttendanceStatus.CONFIRMED;
 
            if (!isAlreadyConfirmed) {
                const xpGain = matrix.confirm;
                applyXpChange(userId, xpGain);
-               
-               // Remove any previous record first (e.g. if was DECLINED) to start fresh or update existing
-               // If existing record was DECLINED or LATE_CANCEL, we are re-confirming.
                
                if (!record) {
                    newAttendees.push({
@@ -411,10 +439,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                        xpAwarded: xpGain
                    });
                } else {
-                   // If coming back from LATE_CANCEL, we might need to handle the penalty reversal logic?
-                   // For simplicity: We grant the confirm XP. The penalty from before stays as "history" of lost XP on user, 
-                   // but here we just reset the record state.
-                   
                    newAttendees = newAttendees.map(a => a.userId === userId ? {
                        ...a,
                        status: AttendanceStatus.CONFIRMED,
@@ -430,7 +454,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                const prevXp = record.xpAwarded; 
 
                if (isLate) {
-                   // Rule: Lose confirmation points (20) AND additional 20. Total loss = 40.
                    const penaltyState = -matrix.confirm; 
                    const correction = penaltyState - prevXp; 
                    
@@ -443,7 +466,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                        cancellationReason: reason
                    } : a);
                } else {
-                   // Early Cancel -> Now behaves as DECLINED (Removed from list effectively)
                    applyXpChange(userId, -prevXp); 
                    
                    newAttendees = newAttendees.map(a => a.userId === userId ? {
@@ -455,7 +477,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                }
            }
        } else if (action === 'DECLINE') {
-           // Explicit decline from Pending state
            if (!record) {
                newAttendees.push({
                    userId,
@@ -464,9 +485,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                    xpAwarded: 0
                });
            } else {
-               // If already exists (e.g. changing from CONFIRMED), treat as Cancel? 
-               // Assuming UI only calls DECLINE when Pending.
-               // Just in case:
                 newAttendees = newAttendees.map(a => a.userId === userId ? {
                    ...a,
                    status: AttendanceStatus.DECLINED
@@ -478,7 +496,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }));
   };
 
-  // Handles Attendance Marking (Manager Action)
   const markAttendance = (eventId: string, userId: string, status: AttendanceStatus.PRESENT | AttendanceStatus.ABSENT) => {
       setEvents(prevEvents => prevEvents.map(event => {
           if (event.id !== eventId) return event;
@@ -491,15 +508,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           let newXp = 0;
 
           if (status === AttendanceStatus.PRESENT) {
-              // Rule: Confirm + Completion. (e.g., 20 + 80 = 100)
               newXp = matrix.confirm + matrix.completion;
           } else if (status === AttendanceStatus.ABSENT) {
-              // Rule: Lose (Confirm + Complete) * 2. 
-              // Example: (20 + 80) * -2 = -200? Or just subtract confirm?
-              // Let's implement simpler: Lose Confirm + Penalty.
-              // Total change: -Confirm - Penalty.
-              // Let's say Absent = -Matrix.Completion. 
-              newXp = matrix.confirm - matrix.completion; // 20 - 80 = -60 net.
+              newXp = matrix.confirm - matrix.completion; 
           }
 
           const correction = newXp - prevXp;
@@ -518,7 +529,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const toggleFollow = (targetId: string) => {
     if (!currentUser) return;
     
-    // Update local user
     const isFollowing = currentUser.following.includes(targetId);
     const newFollowing = isFollowing 
       ? currentUser.following.filter(id => id !== targetId)
@@ -526,33 +536,31 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     
     setCurrentUser({ ...currentUser, following: newFollowing });
     
-    // Sync with allUsers to keep consistent state for other components
     setAllUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, following: newFollowing } : u));
   };
 
-  // --- REGISTER USER LOGIC ---
   const registerUser = (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => {
       const newUser: User = {
           ...userData,
           id: `u${Date.now()}`,
-          role: UserRole.MEMBER, // New users are always MEMBERS
+          role: UserRole.MEMBER, 
           xp: 0,
           level: 1,
-          attendanceRate: 100, // Starts perfect
+          attendanceRate: 100, 
           following: []
       };
       
       setAllUsers(prev => [...prev, newUser]);
-      setCurrentUser(newUser); // Auto-login after registration
+      setCurrentUser(newUser); 
   };
 
   return (
     <AppContext.Provider value={{
-      currentUser, users: allUsers, repertoire, trashBin, posts, finances, events, newsSources,
+      currentUser, users: allUsers, repertoire, trashBin, posts, finances, events, newsSources, userSettings,
       setCurrentUser, deleteItem, restoreItem, addRepertoire, addPost, sharePost, votePoll, toggleFinanceApproval, addEvent,
       handleEventAction, markAttendance, toggleFollow, addNewsSource,
       togglePostLike, addComment, editComment, deleteComment, toggleCommentLike,
-      notificationPermission, requestNotificationPermission, registerUser
+      notificationPermission, requestNotificationPermission, registerUser, updateSettings
     }}>
       {children}
     </AppContext.Provider>
@@ -567,12 +575,10 @@ export const useApp = () => {
 
 // Authenticated App (Session Isolated)
 const AuthenticatedApp = () => {
-  const { currentUser, setCurrentUser, users, addPost, sharePost, posts, events, repertoire, finances, notificationPermission, requestNotificationPermission } = useApp();
+  const { currentUser, setCurrentUser, users, addPost, sharePost, posts, events, repertoire, finances, notificationPermission, requestNotificationPermission, userSettings, updateSettings } = useApp();
   const location = useLocation();
 
-  if (!currentUser) return null; // Safety check
-
-  const isManager = currentUser.role !== UserRole.MEMBER;
+  if (!currentUser) return null; 
 
   // --- VIEW HISTORY STATE (Unique per User ID via Component Remount) ---
   const getDefaultHistory = () => ({
@@ -583,11 +589,10 @@ const AuthenticatedApp = () => {
     finances: Date.now() - (24 * 60 * 60 * 1000),
     admin: Date.now() - (24 * 60 * 60 * 1000),
     profile: Date.now(),
-    lastSeenLevel: currentUser.level, // Init defaults to current to avoid false alert on first login
+    lastSeenLevel: currentUser.level, 
     lastSeenRole: currentUser.role
   });
 
-  // Lazy Initialization: Loads strictly for this currentUser.id on mount
   const [viewHistory, setViewHistory] = useState(() => {
       try {
         const storageKey = `bandSocial_viewHistory_${currentUser.id}`;
@@ -595,19 +600,16 @@ const AuthenticatedApp = () => {
         
         let history = saved ? JSON.parse(saved) : getDefaultHistory();
         
-        // MIGRATION: Ensure new fields exist if loading old data structure
         if (history.lastSeenLevel === undefined) history.lastSeenLevel = currentUser.level;
         if (history.lastSeenRole === undefined) history.lastSeenRole = currentUser.role;
         
         return history;
       } catch (e) {
-        // Fallback for private browsing where localStorage is blocked
         console.warn("LocalStorage access denied, using default history");
         return getDefaultHistory();
       }
   });
 
-  // Effect: Sync state to LocalStorage whenever it changes
   useEffect(() => {
       try {
         localStorage.setItem(`bandSocial_viewHistory_${currentUser.id}`, JSON.stringify(viewHistory));
@@ -616,7 +618,6 @@ const AuthenticatedApp = () => {
       }
   }, [viewHistory, currentUser.id]);
 
-  // Effect: Update state based on current route
   useEffect(() => {
     const now = Date.now();
     setViewHistory(prev => {
@@ -628,7 +629,6 @@ const AuthenticatedApp = () => {
         if (location.pathname === '/finances') update = { finances: now };
         if (location.pathname === '/admin') update = { admin: now };
         
-        // SPECIAL: Visiting Profile clears the Level/Role alert
         if (location.pathname === '/profile') {
             update = { 
                 profile: now,
@@ -656,8 +656,6 @@ const AuthenticatedApp = () => {
   };
 
   // --- NOTIFICATION BADGE LOGIC ---
-  
-  // Specific Logic for Profile/Admin Icon: Only for Level or Role changes
   const hasProfileAlerts = currentUser.level !== viewHistory.lastSeenLevel || currentUser.role !== viewHistory.lastSeenRole;
 
   const hasWallUpdates = posts.some(p => 
@@ -680,12 +678,25 @@ const AuthenticatedApp = () => {
 
   const hasNewRepertoire = repertoire.some(r => r.createdAt > viewHistory.repertoire);
   const hasPendingFinances = finances.some(f => f.status === 'PENDING' && f.createdAt > viewHistory.finances);
-  // Removed hasAdminAlerts for finances to comply with user request for the icon behavior
+
+  // Apply Accessibility Styles dynamically
+  useEffect(() => {
+      if (userSettings.accessibility.largeText) {
+          document.documentElement.style.fontSize = '18px';
+      } else {
+          document.documentElement.style.fontSize = '16px';
+      }
+      
+      if (userSettings.accessibility.highContrast) {
+          document.body.classList.add('contrast-125', 'brightness-110');
+      } else {
+          document.body.classList.remove('contrast-125', 'brightness-110');
+      }
+  }, [userSettings.accessibility]);
 
   return (
     <div className="min-h-screen bg-navy-900 text-bege-100 font-sans pb-20 relative">
       
-      {/* --- PROACTIVE PERMISSION BANNER --- */}
       {notificationPermission === 'default' && (
          <div className="fixed top-20 left-4 right-4 z-[60] animate-bounce-in">
              <div className="bg-navy-800 border-l-4 border-ocre-500 rounded-r-lg shadow-2xl p-4 flex items-start justify-between gap-4">
@@ -737,7 +748,6 @@ const AuthenticatedApp = () => {
             <p className="text-[10px] font-bold text-bege-50 leading-none">{currentUser.nickname}</p>
             <p className="text-[8px] text-ocre-500 font-bold uppercase">{currentUser.role.split('_')[0]}</p>
           </div>
-          {/* HEADER PROFILE ALERT: Only for Rank/Role changes */}
           {hasProfileAlerts && <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-navy-900 animate-pulse"></div>}
         </Link>
       </header>
@@ -813,6 +823,14 @@ const AuthenticatedApp = () => {
                )}
             </div>
           } />
+          <Route path="/settings" element={
+              <SettingsScreen 
+                  currentUser={currentUser}
+                  settings={userSettings}
+                  onUpdateSettings={updateSettings}
+                  onLogout={() => setCurrentUser(null)}
+              />
+          } />
           <Route path="/studio" element={<StudyStudio currentUser={currentUser} onPost={handleStudioPost} />} />
         </Routes>
       </main>
@@ -832,7 +850,6 @@ const AuthenticatedApp = () => {
           <NavLink to="/repertoire" icon={<LibraryBig />} label="Arquivo" hasNotification={hasNewRepertoire} />
           <NavLink to="/finances" icon={<Landmark />} label="Caixa" hasNotification={hasPendingFinances} />
           
-          {/* BOTTOM NAV ALERT: Only for Rank/Role changes, per user request */}
           {[UserRole.GENERAL_MANAGER, UserRole.PEOPLE_MANAGER_1, UserRole.PEOPLE_MANAGER_2].includes(currentUser.role) ? (
              <NavLink to="/admin" icon={<ShieldAlert />} label="Admin" activeColor="text-red-500" hasNotification={hasProfileAlerts} />
           ) : (
@@ -869,7 +886,6 @@ const MainApp = () => {
     return <AuthScreen onLogin={setCurrentUser} />;
   }
 
-  // Key ensures complete unmount/remount when user ID changes, solving the state persistence issue.
   return <AuthenticatedApp key={currentUser.id} />;
 };
 

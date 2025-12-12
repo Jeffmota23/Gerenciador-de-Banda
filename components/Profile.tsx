@@ -1,8 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { User } from '../types';
-import { LogOut, Award, TrendingUp, Music, Mail, Shield, Star, Bell, BellOff, BellRing, Users, Search, X, UserCheck, UserPlus, ChevronRight, MapPin } from 'lucide-react';
+import { LogOut, Award, TrendingUp, Music, Mail, Shield, Star, Bell, BellOff, BellRing, Users, Search, X, UserCheck, UserPlus, ChevronRight, MapPin, Settings as SettingsIcon } from 'lucide-react';
 import { useApp } from '../App';
+import { Link } from 'react-router-dom';
 
 interface Props {
   user: User;
@@ -196,6 +197,11 @@ export const Profile: React.FC<Props> = ({ user, allUsers, onToggleFollow, onLog
       <div className="bg-navy-800 rounded-2xl p-6 border border-navy-700 flex flex-col items-center text-center relative overflow-hidden shadow-xl">
         <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-ocre-600/20 to-navy-800 z-0"></div>
         
+        {/* Settings Button */}
+        <Link to="/settings" className="absolute top-4 right-4 z-20 p-2 bg-navy-900/50 hover:bg-navy-900 text-bege-200 hover:text-white rounded-full transition-colors border border-navy-700/50 backdrop-blur-sm">
+            <SettingsIcon className="w-5 h-5" />
+        </Link>
+
         <div className="z-10 mb-4 relative group">
             {user.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.name} className="w-24 h-24 rounded-full border-4 border-navy-800 object-cover shadow-lg" />
@@ -280,39 +286,7 @@ export const Profile: React.FC<Props> = ({ user, allUsers, onToggleFollow, onLog
         </div>
       </div>
 
-      {/* 3. System Preferences (Notifications) */}
-      <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
-        <h3 className="px-6 py-4 border-b border-navy-700 font-bold text-bege-100 flex items-center gap-2">
-          <Bell className="w-4 h-4" /> Preferências do Sistema
-        </h3>
-        <div className="p-6 flex items-center justify-between">
-            <div>
-               <p className="text-sm font-bold text-bege-50">Notificações no Dispositivo</p>
-               <p className="text-xs text-bege-200/50 mt-1 max-w-xs">
-                 Receba alertas sobre novos eventos, avisos do mural e atualizações de repertório mesmo com o app fechado.
-               </p>
-            </div>
-            
-            {notificationPermission === 'granted' ? (
-              <div className="flex items-center gap-2 text-green-500 font-bold text-xs bg-green-900/20 px-3 py-1.5 rounded-full border border-green-500/20">
-                 <BellRing className="w-4 h-4" /> Ativo
-              </div>
-            ) : notificationPermission === 'denied' ? (
-              <div className="flex items-center gap-2 text-red-400 font-bold text-xs bg-red-900/20 px-3 py-1.5 rounded-full border border-red-500/20">
-                 <BellOff className="w-4 h-4" /> Bloqueado
-              </div>
-            ) : (
-              <button 
-                onClick={requestNotificationPermission}
-                className="bg-ocre-600 hover:bg-ocre-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg text-xs flex items-center gap-2"
-              >
-                 <Bell className="w-4 h-4" /> Ativar
-              </button>
-            )}
-        </div>
-      </div>
-
-      {/* 4. Account Details */}
+      {/* 3. Account Details */}
       <div className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
         <h3 className="px-6 py-4 border-b border-navy-700 font-bold text-bege-100 flex items-center gap-2">
           <Shield className="w-4 h-4" /> Dados Pessoais (Privado)
@@ -350,14 +324,6 @@ export const Profile: React.FC<Props> = ({ user, allUsers, onToggleFollow, onLog
            </div>
         </div>
       </div>
-
-      {/* 5. Logout Action */}
-      <button 
-        onClick={onLogout}
-        className="w-full py-4 rounded-xl border border-red-900/50 bg-red-900/10 text-red-400 hover:bg-red-900/30 hover:border-red-500/50 transition-all font-bold flex items-center justify-center gap-2"
-      >
-        <LogOut className="w-5 h-5" /> Sair da Conta
-      </button>
 
       <p className="text-center text-xs text-bege-200/30 font-mono pt-4">BandSocial Manager v1.2.0 PT-BR</p>
     </div>

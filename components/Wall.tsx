@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User, PostItem, UserRole, PollOption, LocationData, EventItem, Comment } from '../types';
 import { Plus, Image as ImageIcon, Link as LinkIcon, AtSign, Hash, BarChart2, MessageSquare, Trash2, X, Check, Users, MapPin, Heart, Share2, Music, Calendar, Clock, MoreHorizontal, Smile, Send, Edit2, CheckCircle2, Repeat, ExternalLink, Maximize2, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -146,7 +145,7 @@ const WallCommentSection = ({ post, currentUser }: { post: PostItem, currentUser
         setInputContent(prev => prev + emoji);
     };
   
-    const CommentItem = ({ comment, depth = 0 }: { comment: Comment, depth?: number }) => {
+    const CommentItem: React.FC<{ comment: Comment, depth?: number }> = ({ comment, depth = 0 }) => {
         const isAuthor = comment.authorId === currentUser.id;
         const canEdit = isAuthor && (Date.now() - comment.createdAt < 8 * 60 * 60 * 1000); 
         const hasLiked = comment.likedBy.includes(currentUser.id);

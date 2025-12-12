@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Music, ArrowRight, ArrowLeft, User as UserIcon, Mail, Facebook, Chrome, Camera, AlertCircle, CheckCircle2, Loader2, Sparkles, LogOut } from 'lucide-react';
+import { Music, ArrowRight, ArrowLeft, User as UserIcon, Mail, Facebook, Chrome, Camera, AlertCircle, CheckCircle2, Loader2, Sparkles, LogOut, ShieldCheck, Lock } from 'lucide-react';
 import { User, UserRole } from '../types';
 import { MOCK_USERS } from '../constants';
 import { useApp } from '../App';
@@ -25,20 +25,23 @@ interface SimulatedSession {
 export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
   const { users, registerUser } = useApp();
   
-  // Views:
-  // LOGIN: Initial screen with invite link
-  // DETECTED_ACCOUNT: "Continue as..." screen
-  // MANUAL_EMAIL: Input for email if no social account
-  // SOCIAL_LOGIN_SIMULATION: The OAuth popup simulation
-  // REGISTER_FORM: The final long form
-  const [view, setView] = useState<'LOGIN' | 'DETECTED_ACCOUNT' | 'MANUAL_EMAIL' | 'SOCIAL_LOGIN_SIMULATION' | 'REGISTER_FORM'>('LOGIN');
+  // Views: LOGIN -> Choice
+  // DETECTED_ACCOUNT -> Fast track
+  // SOCIAL_LOGIN_SIMULATION -> Social Auth
+  // EMAIL_AUTH -> Email + Password
+  // REGISTER_FORM -> Final details
+  const [view, setView] = useState<'LOGIN' | 'DETECTED_ACCOUNT' | 'SOCIAL_LOGIN_SIMULATION' | 'EMAIL_AUTH' | 'REGISTER_FORM'>('LOGIN');
   
   const [authMethod, setAuthMethod] = useState<'EMAIL' | 'GOOGLE' | 'FACEBOOK' | null>(null);
   const [simulatedSession, setSimulatedSession] = useState<SimulatedSession | null>(null);
 
-  // Manual Email Step State
+  // Social Login Input State (To allow typing different emails in the simulator)
+  const [socialEmailInput, setSocialEmailInput] = useState('');
+
+  // Email/Password Auth State
   const [manualEmail, setManualEmail] = useState('');
-  const [manualEmailError, setManualEmailError] = useState<string | null>(null);
+  const [manualPassword, setManualPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Registration Form State
   const [formData, setFormData] = useState({
@@ -66,9 +69,8 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
 
   // Simulate detecting a browser session on mount
   useEffect(() => {
-      // Simulate a small delay as if checking cookies/local storage
       const timer = setTimeout(() => {
-          // 80% chance of "detecting" a Google account for demo purposes
+          // 80% chance of detecting a session for demo
           if (Math.random() > 0.2) {
               setSimulatedSession({
                   provider: 'GOOGLE',
@@ -87,73 +89,94 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
 
   // --- ACTIONS ---
 
-  const handleStartRegistration = () => {
-      if (simulatedSession) {
-          setView('DETECTED_ACCOUNT');
-      } else {
-          setView('MANUAL_EMAIL');
+  const checkUserAndProceed = (email: string, name?: string, avatarUrl?: string) => {
+      // 1. LOGIN: Check if user already exists based on authenticated email
+      const existingUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      
+      if (existingUser) {
+          // Login immediately
+          setTimeout(() => onLogin(existingUser), 500);
+          return;
       }
+
+      // 2. REGISTER: Pre-fill form and go to registration
+      setFormData(prev => ({
+          ...prev,
+          email: email, // Locked
+          name: name || prev.name,
+          nickname: name ? name.split(' ')[0] : prev.nickname
+      }));
+      
+      if (avatarUrl) {
+          setAvatarPreview(avatarUrl);
+      }
+
+      setView('REGISTER_FORM');
   };
 
   const handleContinueWithDetected = () => {
       if (!simulatedSession) return;
       setAuthMethod(simulatedSession.provider);
-      setFormData(prev => ({
-          ...prev,
-          email: simulatedSession.email,
-          name: simulatedSession.name
-      }));
-      // We skip the OAuth simulation screen because the "session" is already detected on the device
-      setView('REGISTER_FORM');
+      checkUserAndProceed(simulatedSession.email, simulatedSession.name, simulatedSession.avatarUrl);
   };
 
-  const handleUseAnotherAccount = () => {
-      setAuthMethod('EMAIL'); // Defaulting to manual flow
-      setManualEmail('');
-      setManualEmailError(null);
-      setView('MANUAL_EMAIL');
+  const handleSocialLoginClick = (method: 'GOOGLE' | 'FACEBOOK') => {
+      setAuthMethod(method);
+      // Pre-fill simulator for convenience, but user can change it
+      if (method === 'GOOGLE') setSocialEmailInput('usuario.novo@gmail.com');
+      else setSocialEmailInput('usuario.novo@facebook.com');
+      
+      setView('SOCIAL_LOGIN_SIMULATION');
   };
 
-  const handleManualEmailSubmit = () => {
-      setManualEmailError(null);
-      
-      // Basic Email Regex
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      
-      if (!manualEmail) {
-          setManualEmailError("Por favor, digite um email.");
-          return;
-      }
-      
-      if (!emailRegex.test(manualEmail)) {
-          setManualEmailError("Por favor, digite um email válido (ex: nome@email.com).");
+  const handleSocialLoginSubmit = () => {
+      // Logic inside the "Authenticator" window
+      let finalEmail = socialEmailInput;
+      let finalName = authMethod === 'GOOGLE' ? 'Usuário Google' : 'Usuário Facebook';
+      let finalAvatar = undefined;
+
+      if (!finalEmail) {
+          alert("Por favor, entre com um e-mail válido no autenticador.");
           return;
       }
 
-      // Check if email already exists (Mock check)
-      if (users.some(u => u.email === manualEmail)) {
-          setManualEmailError("Este email já está cadastrado.");
+      // If typing a known mock user email, let them log in
+      const knownUser = users.find(u => u.email === finalEmail);
+      if (knownUser) {
+          onLogin(knownUser);
+          return;
+      }
+
+      // If it's the specific "Jefferson" demo email
+      if (finalEmail === 'jefferson.silva@gmail.com') {
+          finalName = 'Jefferson Silva';
+          finalAvatar = 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&q=80';
+      }
+
+      checkUserAndProceed(finalEmail, finalName, finalAvatar);
+  };
+
+  const handleEmailAuthSubmit = () => {
+      setAuthError(null);
+      
+      if (!manualEmail.trim()) {
+          setAuthError("Digite seu e-mail.");
+          return;
+      }
+      if (!manualPassword.trim()) {
+          setAuthError("Crie ou digite sua senha.");
+          return;
+      }
+      if (manualPassword.length < 6) {
+          setAuthError("A senha deve ter no mínimo 6 caracteres.");
           return;
       }
 
       setAuthMethod('EMAIL');
-      setFormData(prev => ({ ...prev, email: manualEmail }));
-      setView('REGISTER_FORM');
+      checkUserAndProceed(manualEmail);
   };
 
-  // --- PREVIOUS LOGIC (Maintained) ---
-
-  const handleSocialLoginSuccess = () => {
-      const mockEmail = authMethod === 'GOOGLE' ? 'usuario.google@gmail.com' : 'usuario.facebook@email.com';
-      const mockName = authMethod === 'GOOGLE' ? 'Usuário Google' : 'Usuário Facebook';
-      
-      setFormData(prev => ({ 
-          ...prev, 
-          email: mockEmail,
-          name: prev.name || mockName 
-      }));
-      setView('REGISTER_FORM');
-  };
+  // --- REGISTRATION LOGIC ---
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       setPhotoError(null);
@@ -172,7 +195,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
               if (validation.isValid) {
                   setAvatarPreview(tempUrl);
               } else {
-                  setPhotoError(validation.reason || "Foto inválida. Use uma foto clara do rosto.");
+                  setPhotoError(validation.reason || "Foto inválida.");
                   URL.revokeObjectURL(tempUrl); 
               }
           } catch (err) {
@@ -193,12 +216,12 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
       const missing = required.filter(field => !formData[field as keyof typeof formData]);
       
       if (missing.length > 0 || !avatarPreview) {
-          setFormError("Todos os campos e a foto de perfil validada são obrigatórios.");
+          setFormError("Todos os campos e a foto de perfil são obrigatórios.");
           return;
       }
 
       if (!validateNickname(formData.nickname)) {
-          setFormError("Este nickname já está em uso. Escolha outro.");
+          setFormError("Este nickname já está em uso.");
           return;
       }
 
@@ -243,22 +266,65 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
             </div>
         )}
 
-        {/* VIEW 1: INITIAL LOGIN (INVITE & MOCK MANAGERS) */}
+        {/* VIEW 1: INITIAL LOGIN CHOICE */}
         {view === 'LOGIN' && (
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
-                {/* Invite Link Section */}
-                <div className="bg-navy-900/50 p-4 rounded-xl border border-ocre-500/30 mb-6 animate-fade-in">
-                    <h3 className="text-sm font-bold text-bege-50 mb-2">Recebeu um convite?</h3>
+                
+                {/* Simulated Auto-Redirect if session exists (UI representation) */}
+                {simulatedSession && (
+                    <div className="bg-green-900/20 border border-green-500/30 p-3 rounded-lg mb-4 flex items-center gap-3 cursor-pointer hover:bg-green-900/30 transition-colors" onClick={() => setView('DETECTED_ACCOUNT')}>
+                        <div className="w-8 h-8 rounded-full bg-navy-900 flex items-center justify-center">
+                            <img src={simulatedSession.avatarUrl} className="w-full h-full rounded-full" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-xs text-green-400 font-bold">Sessão encontrada</p>
+                            <p className="text-sm text-bege-50">Continuar como {simulatedSession.name.split(' ')[0]}?</p>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-green-400" />
+                    </div>
+                )}
+
+                <div className="space-y-3 animate-fade-in">
+                    <h3 className="text-sm font-bold text-bege-50 text-center mb-2">Entrar ou Cadastrar-se</h3>
+                    
                     <button 
-                        onClick={handleStartRegistration}
-                        className="w-full bg-ocre-600 hover:bg-ocre-500 text-white font-bold py-3 rounded-lg shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
+                        onClick={() => handleSocialLoginClick('GOOGLE')} 
+                        className="w-full bg-white text-gray-900 font-bold p-4 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-100 transition-all shadow-lg active:scale-95"
                     >
-                        <Mail className="w-4 h-4" /> Cadastrar-se Agora
+                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="G" />
+                        Continuar com Google
+                    </button>
+
+                    <button 
+                        onClick={() => handleSocialLoginClick('FACEBOOK')} 
+                        className="w-full bg-[#1877F2] text-white font-bold p-4 rounded-xl flex items-center justify-center gap-3 hover:bg-[#166fe5] transition-all shadow-lg active:scale-95"
+                    >
+                        <Facebook className="w-6 h-6 fill-current" />
+                        Continuar com Facebook
+                    </button>
+
+                    <div className="flex items-center gap-2 my-4 opacity-50">
+                        <div className="h-px bg-bege-200 flex-1"></div>
+                        <span className="text-[10px] uppercase font-bold text-bege-200">Ou</span>
+                        <div className="h-px bg-bege-200 flex-1"></div>
+                    </div>
+
+                    <button 
+                        onClick={() => {
+                            setManualEmail('');
+                            setManualPassword('');
+                            setAuthError(null);
+                            setView('EMAIL_AUTH');
+                        }}
+                        className="w-full bg-navy-900 text-bege-100 font-bold p-4 rounded-xl flex items-center justify-center gap-3 hover:bg-navy-700 border border-navy-600 transition-all active:scale-95"
+                    >
+                        <Mail className="w-5 h-5" />
+                        Continuar com E-mail
                     </button>
                 </div>
 
-                <div className="border-t border-navy-700 pt-4">
-                    <p className="text-[10px] text-bege-200/50 uppercase font-bold text-center mb-4">Acesso de Simulação (Gestores)</p>
+                <div className="border-t border-navy-700 pt-6 mt-4">
+                    <p className="text-[10px] text-bege-200/50 uppercase font-bold text-center mb-4">Acesso Rápido (Ambiente de Teste)</p>
                     <div className="space-y-2">
                         {generalManager && (
                             <button onClick={() => onLogin(generalManager)} className="w-full bg-navy-900 hover:bg-navy-700 p-3 rounded-lg flex items-center gap-3 border border-navy-600">
@@ -277,7 +343,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
             </div>
         )}
 
-        {/* VIEW 2: DETECTED ACCOUNT (AUTO-DETECT SIMULATION) */}
+        {/* VIEW 2: DETECTED ACCOUNT */}
         {view === 'DETECTED_ACCOUNT' && simulatedSession && (
             <div className="space-y-6 animate-fade-in">
                 <div className="text-center">
@@ -306,7 +372,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                     </button>
                     
                     <button 
-                        onClick={handleUseAnotherAccount}
+                        onClick={() => setView('LOGIN')}
                         className="w-full text-sm text-bege-200/50 hover:text-white py-2"
                     >
                         Nenhuma dessas contas
@@ -315,8 +381,78 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
             </div>
         )}
 
-        {/* VIEW 3: MANUAL EMAIL ENTRY (VALIDATION STEP) */}
-        {view === 'MANUAL_EMAIL' && (
+        {/* VIEW 3: SOCIAL LOGIN SIMULATION (AUTHENTICATOR) */}
+        {view === 'SOCIAL_LOGIN_SIMULATION' && (
+            <div className="flex-1 flex flex-col h-full animate-fade-in">
+                <button onClick={() => setView('LOGIN')} className="text-left text-gray-400 hover:text-white mb-4 flex items-center gap-2 text-sm"><ArrowLeft className="w-4 h-4"/> Cancelar</button>
+                
+                <div className="flex-1 flex flex-col justify-center h-full">
+                    {authMethod === 'GOOGLE' ? (
+                        <div className="bg-white text-gray-800 p-8 rounded-xl flex flex-col items-center gap-4 shadow-2xl relative overflow-hidden">
+                            {/* Fake Browser Bar */}
+                            <div className="absolute top-0 left-0 right-0 h-6 bg-gray-200 flex items-center px-2 gap-1">
+                                <div className="w-2 h-2 rounded-full bg-red-400"></div>
+                                <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+                                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                                <span className="text-[8px] text-gray-500 ml-2">accounts.google.com</span>
+                            </div>
+
+                            <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-12 h-12 mb-2 mt-4" alt="Google" />
+                            <h3 className="text-xl font-medium text-center">Fazer login com o Google</h3>
+                            <p className="text-sm text-gray-600 text-center">Prosseguir para <strong>BandSocial</strong></p>
+                            
+                            <div className="w-full space-y-4 mt-6">
+                                <div className="border border-gray-300 rounded px-3 py-2 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                    <p className="text-xs text-gray-500">Email ou telefone</p>
+                                    <input 
+                                        className="w-full outline-none text-gray-900 text-sm bg-white" 
+                                        value={socialEmailInput}
+                                        onChange={(e) => setSocialEmailInput(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs text-blue-600 font-bold cursor-pointer hover:underline">Esqueceu seu e-mail?</span>
+                                </div>
+                                <p className="text-xs text-gray-500">Não está no seu computador? Use o modo Convidado para fazer login com privacidade.</p>
+                                <div className="flex justify-end gap-2 mt-4">
+                                    <button onClick={() => setView('LOGIN')} className="text-blue-600 font-bold text-sm px-4 py-2 rounded hover:bg-blue-50">Criar conta</button>
+                                    <button onClick={handleSocialLoginSubmit} className="bg-[#1a73e8] text-white font-medium px-6 py-2 rounded hover:bg-[#1557b0] transition-colors shadow">Próxima</button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-[#f0f2f5] text-gray-900 p-8 rounded-xl flex flex-col items-center gap-4 shadow-2xl relative overflow-hidden">
+                             {/* Fake Browser Bar */}
+                             <div className="absolute top-0 left-0 right-0 h-6 bg-gray-300 flex items-center px-2 gap-1 border-b border-gray-400">
+                                <span className="text-[8px] text-gray-600 ml-auto mr-auto">facebook.com/login</span>
+                            </div>
+
+                            <Facebook className="w-16 h-16 text-[#1877F2] mb-2 mt-6" />
+                            
+                            <div className="w-full space-y-3 mt-4 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                                <p className="text-center text-sm mb-4">Faça login no Facebook para usar sua conta com <strong>BandSocial</strong>.</p>
+                                <input 
+                                    className="w-full bg-white text-gray-800 border border-gray-300 rounded p-3 text-sm placeholder-gray-500 focus:border-blue-500 outline-none" 
+                                    placeholder="Email ou telefone" 
+                                    value={socialEmailInput}
+                                    onChange={(e) => setSocialEmailInput(e.target.value)}
+                                    autoFocus
+                                />
+                                <input className="w-full bg-white text-gray-800 border border-gray-300 rounded p-3 text-sm placeholder-gray-500 focus:border-blue-500 outline-none" type="password" placeholder="Senha" defaultValue="123456" />
+                                <button onClick={handleSocialLoginSubmit} className="w-full bg-[#1877F2] text-white font-bold py-3 rounded hover:bg-[#166fe5] transition-colors shadow-lg mt-2">Entrar</button>
+                                <div className="text-center mt-2">
+                                    <a href="#" className="text-xs text-[#1877F2] hover:underline">Esqueceu a conta?</a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* VIEW 4: EMAIL/PASSWORD AUTH */}
+        {view === 'EMAIL_AUTH' && (
             <div className="space-y-6 animate-fade-in flex flex-col h-full">
                 <button onClick={() => setView('LOGIN')} className="self-start text-bege-200/50 hover:text-white flex items-center gap-2 text-xs mb-2">
                     <ArrowLeft className="w-4 h-4" /> Voltar
@@ -326,8 +462,8 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                     <div className="w-16 h-16 bg-navy-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-navy-700">
                         <Mail className="w-8 h-8 text-ocre-500" />
                     </div>
-                    <h2 className="text-xl font-bold text-bege-50">Qual é o seu e-mail?</h2>
-                    <p className="text-sm text-bege-200/60 mt-1">Digite o e-mail que você usará para acessar a banda.</p>
+                    <h2 className="text-xl font-bold text-bege-50">Acesse sua conta</h2>
+                    <p className="text-sm text-bege-200/60 mt-1">Digite seu e-mail e senha para entrar ou se cadastrar.</p>
                 </div>
 
                 <div className="space-y-4">
@@ -340,48 +476,40 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                             value={manualEmail} 
                             onChange={e => {
                                 setManualEmail(e.target.value);
-                                setManualEmailError(null);
+                                setAuthError(null);
                             }} 
                             className="bg-navy-900 border border-navy-600 rounded-lg p-4 text-base text-bege-100 w-full outline-none focus:border-ocre-500 placeholder-navy-500 transition-colors" 
                         />
-                        {manualEmailError && (
-                            <p className="text-red-400 text-xs mt-2 flex items-center gap-1 font-bold animate-pulse">
-                                <AlertCircle className="w-3 h-3" /> {manualEmailError}
-                            </p>
-                        )}
                     </div>
+                    <div>
+                        <label className="text-xs font-bold text-bege-200 mb-1 block uppercase">Senha</label>
+                        <div className="relative">
+                            <input 
+                                type="password"
+                                placeholder="******" 
+                                value={manualPassword} 
+                                onChange={e => {
+                                    setManualPassword(e.target.value);
+                                    setAuthError(null);
+                                }} 
+                                className="bg-navy-900 border border-navy-600 rounded-lg p-4 text-base text-bege-100 w-full outline-none focus:border-ocre-500 placeholder-navy-500 transition-colors" 
+                            />
+                            <Lock className="w-4 h-4 text-gray-500 absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1">* Se for seu primeiro acesso, esta será sua senha de cadastro.</p>
+                    </div>
+
+                    {authError && (
+                        <p className="text-red-400 text-xs mt-2 flex items-center gap-1 font-bold animate-pulse">
+                            <AlertCircle className="w-3 h-3" /> {authError}
+                        </p>
+                    )}
                     
                     <button 
-                        onClick={handleManualEmailSubmit} 
+                        onClick={handleEmailAuthSubmit} 
                         className="w-full bg-ocre-600 hover:bg-ocre-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 mt-4"
                     >
-                        Continuar <ArrowRight className="w-4 h-4" />
-                    </button>
-                </div>
-                
-                <div className="mt-auto text-center">
-                    <button onClick={() => setView('SOCIAL_LOGIN_SIMULATION')} className="text-xs text-blue-400 hover:underline">
-                        Prefere entrar com Google/Facebook?
-                    </button>
-                </div>
-            </div>
-        )}
-
-        {/* VIEW 4: SOCIAL LOGIN SIMULATION (FALLBACK IF SELECTED MANUALLY) */}
-        {view === 'SOCIAL_LOGIN_SIMULATION' && (
-            <div className="flex-1 flex flex-col h-full animate-fade-in">
-                <button onClick={() => setView('MANUAL_EMAIL')} className="text-left text-gray-400 hover:text-white mb-4 flex items-center gap-2 text-sm"><ArrowLeft className="w-4 h-4"/> Voltar</button>
-                
-                {/* Simplified choice if directly accessed */}
-                <div className="space-y-4 my-auto">
-                    <h3 className="text-center font-bold text-bege-50 mb-4">Escolha o provedor</h3>
-                    <button onClick={() => { setAuthMethod('GOOGLE'); handleSocialLoginSuccess(); }} className="w-full bg-white text-gray-900 font-bold p-4 rounded-xl flex items-center gap-3 hover:bg-gray-100">
-                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="G" />
-                        Entrar com Google
-                    </button>
-                    <button onClick={() => { setAuthMethod('FACEBOOK'); handleSocialLoginSuccess(); }} className="w-full bg-[#1877F2] text-white font-bold p-4 rounded-xl flex items-center gap-3 hover:bg-[#166fe5]">
-                        <Facebook className="w-6 h-6 fill-current" />
-                        Entrar com Facebook
+                        Entrar / Cadastrar <ArrowRight className="w-4 h-4" />
                     </button>
                 </div>
             </div>
@@ -391,7 +519,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
         {view === 'REGISTER_FORM' && (
             <div className="flex-1 flex flex-col h-full animate-fade-in overflow-hidden">
                 <h2 className="text-lg font-bold text-bege-50 mb-4 flex items-center gap-2">
-                    <UserIcon className="w-5 h-5 text-ocre-500" /> Ficha de Inscrição
+                    <UserIcon className="w-5 h-5 text-ocre-500" /> Finalizar Cadastro
                 </h2>
                 
                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4 pb-4">
@@ -457,13 +585,16 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                             <input placeholder="Nickname (Único) *" value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value})} className={inputStyle} />
                         </div>
 
-                        {/* Email - READONLY (Passed from previous steps) */}
+                        {/* Email - READONLY (Authentication Verified) */}
                         <div className="relative">
+                            <div className="absolute -top-2 left-2 bg-navy-800 px-1 text-[10px] text-green-500 font-bold z-10 flex items-center gap-1">
+                                <ShieldCheck className="w-3 h-3" /> Autenticado
+                            </div>
                             <input 
                                 placeholder="Email" 
                                 value={formData.email} 
                                 readOnly 
-                                className={`${inputStyle} opacity-70 cursor-not-allowed border-dashed bg-navy-950`} 
+                                className={`${inputStyle} opacity-70 cursor-not-allowed border-green-900/50 bg-navy-950 text-green-100`} 
                             />
                             <div className="absolute right-3 top-3">
                                 <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -513,17 +644,13 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                 <div className="pt-4 mt-auto flex gap-3">
                     <button 
                         onClick={() => {
-                            // Go back to either Detected Account or Manual Email
-                            if (simulatedSession && authMethod !== 'EMAIL') {
-                                setView('DETECTED_ACCOUNT');
-                            } else {
-                                setView('MANUAL_EMAIL');
-                            }
+                            // Cancel registration goes back to login choice
+                            setView('LOGIN');
                         }} 
                         className="px-4 py-3 rounded-lg font-bold text-bege-200 hover:text-white border border-navy-600"
                         disabled={isAnalyzingPhoto}
                     >
-                        Voltar
+                        Cancelar
                     </button>
                     <button 
                         onClick={handleRegisterSubmit} 

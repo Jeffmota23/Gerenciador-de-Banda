@@ -27,13 +27,13 @@ export const MOCK_USERS: User[] = [
   // Level 2: Agenda Managers (Eventos)
   { 
     id: 'u2', name: 'Sara Silva', nickname: 'SaraCornet', role: UserRole.AGENDA_MANAGER_1, instrument: 'Cornet', experienceTime: '8 anos',
-    xp: 4200, level: 22, attendanceRate: 95, 
+    xp: 4200, level: 22, attendanceRate: 95, email: 'sara.silva@email.com',
     cpf: '000.000.000-02', rg: '00.000.002-2', phone: '(11) 99999-0002', address: DEFAULT_ADDRESS,
     following: ['u1'] 
   },
   { 
     id: 'u3', name: 'Miguel Santos', nickname: 'MigTrombone', role: UserRole.AGENDA_MANAGER_2, instrument: 'Trombone', experienceTime: '6 anos',
-    xp: 3800, level: 19, attendanceRate: 88, 
+    xp: 3800, level: 19, attendanceRate: 88, email: 'miguel.santos@email.com',
     cpf: '000.000.000-03', rg: '00.000.003-3', phone: '(11) 99999-0003', address: DEFAULT_ADDRESS,
     following: [] 
   },
@@ -41,13 +41,13 @@ export const MOCK_USERS: User[] = [
   // Level 3: Wall/Post Managers (Conteúdo Oficial)
   { 
     id: 'u4', name: 'Jéssica Lima', nickname: 'JessHorn', role: UserRole.WALL_MANAGER_1, instrument: 'Sax Horn', experienceTime: '7 anos',
-    xp: 5100, level: 26, attendanceRate: 92, 
+    xp: 5100, level: 26, attendanceRate: 92, email: 'jessica.lima@email.com',
     cpf: '000.000.000-04', rg: '00.000.004-4', phone: '(11) 99999-0004', address: DEFAULT_ADDRESS,
     following: ['u1', 'u6'] 
   },
   { 
     id: 'u5', name: 'Tomás Costa', nickname: 'TomPerc', role: UserRole.WALL_MANAGER_2, instrument: 'Percussão', experienceTime: '4 anos',
-    xp: 2900, level: 14, attendanceRate: 85, 
+    xp: 2900, level: 14, attendanceRate: 85, email: 'tomas.costa@email.com',
     cpf: '000.000.000-05', rg: '00.000.005-5', phone: '(11) 99999-0005', address: DEFAULT_ADDRESS,
     following: [] 
   },
@@ -55,13 +55,13 @@ export const MOCK_USERS: User[] = [
   // Level 4: Repertoire Managers (Arquivistas)
   { 
     id: 'u6', name: 'Emília Souza', nickname: 'EmiHorn', role: UserRole.REPERTOIRE_MANAGER_1, instrument: 'Trompa', experienceTime: '10 anos',
-    xp: 6200, level: 31, attendanceRate: 98, 
+    xp: 6200, level: 31, attendanceRate: 98, email: 'emilia.souza@email.com',
     cpf: '000.000.000-06', rg: '00.000.006-6', phone: '(11) 99999-0006', address: DEFAULT_ADDRESS,
     following: [] 
   },
   { 
     id: 'u7', name: 'Davi Oliveira', nickname: 'DaviEuph', role: UserRole.REPERTOIRE_MANAGER_2, instrument: 'Euphonium', experienceTime: '9 anos',
-    xp: 4500, level: 23, attendanceRate: 90, 
+    xp: 4500, level: 23, attendanceRate: 90, email: 'davi.oliveira@email.com',
     cpf: '000.000.000-07', rg: '00.000.007-7', phone: '(11) 99999-0007', address: DEFAULT_ADDRESS,
     following: ['u3'] 
   },
@@ -69,13 +69,13 @@ export const MOCK_USERS: User[] = [
   // Level 5: People Managers (Comunidade/Presença)
   { 
     id: 'u8', name: 'Laura Mendes', nickname: 'LauFlugel', role: UserRole.PEOPLE_MANAGER_1, instrument: 'Flugelhorn', experienceTime: '12 anos',
-    xp: 7000, level: 35, attendanceRate: 99, 
+    xp: 7000, level: 35, attendanceRate: 99, email: 'laura.mendes@email.com',
     cpf: '000.000.000-08', rg: '00.000.008-8', phone: '(11) 99999-0008', address: DEFAULT_ADDRESS,
     following: ['u2'] 
   },
   { 
     id: 'u9', name: 'Cristiano Rocha', nickname: 'CrisTuba', role: UserRole.PEOPLE_MANAGER_2, instrument: 'Tuba', experienceTime: '5 anos',
-    xp: 3100, level: 15, attendanceRate: 82, 
+    xp: 3100, level: 15, attendanceRate: 82, email: 'cristiano.rocha@email.com',
     cpf: '000.000.000-09', rg: '00.000.009-9', phone: '(11) 99999-0009', address: DEFAULT_ADDRESS,
     following: [] 
   },
@@ -83,7 +83,7 @@ export const MOCK_USERS: User[] = [
   // Members
   { 
     id: 'u10', name: 'João Batista', nickname: 'JoaoBari', role: UserRole.MEMBER, instrument: 'Barítono', experienceTime: '2 anos',
-    xp: 1200, level: 6, attendanceRate: 75, 
+    xp: 1200, level: 6, attendanceRate: 75, email: 'joao.batista@email.com',
     cpf: '000.000.000-10', rg: '00.000.010-10', phone: '(11) 99999-0010', address: DEFAULT_ADDRESS,
     following: ['u1', 'u7'] 
   },
