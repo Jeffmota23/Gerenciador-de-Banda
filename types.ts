@@ -264,7 +264,10 @@ export interface AppContextType extends AppState {
   requestNotificationPermission: () => Promise<void>;
   
   registerUser: (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => void;
-  
-  // NEW: Update Settings
   updateSettings: (newSettings: Partial<UserSettings>) => void;
+
+  // PWA Support
+  isPwaInstallable: boolean;
+  installPwa: () => void;
+  isOffline: boolean;
 }

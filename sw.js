@@ -1,49 +1,89 @@
 
-const CACHE_NAME = 'bandsocial-v1';
-const urlsToCache = [
+const CACHE_NAME = 'bandsocial-v2';
+const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/index.tsx',
   '/manifest.json'
 ];
 
-// Install Service Worker
+// External assets that the app depends on (CDNs)
+const EXTERNAL_DOMAINS = [
+  'cdn.tailwindcss.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'cdn-icons-png.flaticon.com',
+  'aistudiocdn.com',
+  'images.unsplash.com',
+  'www.svgrepo.com',
+  'api.mapbox.com'
+];
+
+// Install Event: Cache App Shell
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('[SW] Caching App Shell');
+      return cache.addAll(STATIC_ASSETS);
+    })
   );
+  self.skipWaiting();
 });
 
-// Cache and return requests
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Cache hit - return response
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
-  );
-});
-
-// Update Service Worker
+// Activate Event: Clean up old caches
 self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[SW] Clearing old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
+    })
+  );
+  self.clients.claim();
+});
+
+// Fetch Event: Network First for API, Cache First for Assets/CDNs
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+
+  // 1. Handle External Dependencies (CDN) - Cache First Strategy
+  if (EXTERNAL_DOMAINS.some(domain => url.hostname.includes(domain))) {
+    event.respondWith(
+      caches.match(event.request).then(cachedResponse => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request)
+          .then(networkResponse => {
+            // Valid response?
+            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {
+              return networkResponse;
+            }
+            // Cache new response
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseToCache);
+            });
+            return networkResponse;
+          })
+          .catch(() => {
+             // Fallback logic if needed, or just fail for external assets
+             return null;
+          });
+      })
+    );
+    return;
+  }
+
+  // 2. Handle Local App Files - Cache First, fall back to Network
+  event.respondWith(
+    caches.match(event.request).then(response => {
+      return response || fetch(event.request);
     })
   );
 });

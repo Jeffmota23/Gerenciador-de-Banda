@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, UserSettings } from '../types';
 import { ArrowLeft, Bell, Lock, Eye, Moon, Smartphone, HardDrive, LogOut, ChevronRight, Check, ShieldCheck, Download, Trash2, SmartphoneNfc, FileText, HelpCircle, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../App';
 
 interface Props {
   currentUser: User;
@@ -15,6 +16,7 @@ type SettingsTab = 'GENERAL' | 'NOTIFICATIONS' | 'PRIVACY';
 
 export const SettingsScreen: React.FC<Props> = ({ currentUser, settings, onUpdateSettings, onLogout }) => {
   const navigate = useNavigate();
+  const { isPwaInstallable, installPwa } = useApp();
   const [activeTab, setActiveTab] = useState<SettingsTab>('GENERAL');
   const [isExporting, setIsExporting] = useState(false);
   const [cacheSize, setCacheSize] = useState('Calculando...');
@@ -133,6 +135,24 @@ export const SettingsScreen: React.FC<Props> = ({ currentUser, settings, onUpdat
           {/* === TAB: GENERAL === */}
           {activeTab === 'GENERAL' && (
               <>
+                {/* PWA INSTALL BANNER */}
+                {isPwaInstallable && (
+                    <div className="bg-gradient-to-r from-ocre-600/20 to-navy-800 border border-ocre-600 rounded-xl p-6 flex items-center justify-between shadow-lg">
+                        <div>
+                            <h3 className="font-bold text-bege-50 text-sm flex items-center gap-2">
+                                <Smartphone className="w-4 h-4 text-ocre-500" /> Instalar Aplicativo
+                            </h3>
+                            <p className="text-xs text-bege-200 mt-1">Adicione à tela inicial para acesso rápido.</p>
+                        </div>
+                        <button 
+                            onClick={installPwa}
+                            className="bg-ocre-600 hover:bg-ocre-500 text-white font-bold py-2 px-4 rounded-lg text-xs shadow-md"
+                        >
+                            Instalar Agora
+                        </button>
+                    </div>
+                )}
+
                 <section className="bg-navy-800 rounded-xl border border-navy-700 overflow-hidden">
                     <h3 className="px-6 py-4 text-sm font-bold text-bege-50 border-b border-navy-700 flex items-center gap-2">
                         <Smartphone className="w-4 h-4 text-ocre-500" /> Acessibilidade & Aparência

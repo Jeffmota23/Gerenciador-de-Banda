@@ -19,7 +19,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { 
   LayoutDashboard, Users, Calendar, LibraryBig, 
-  Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check, Bell, BellRing
+  Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check, Bell, BellRing, WifiOff
 } from 'lucide-react';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -56,16 +56,55 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [newsSources, setNewsSources] = useState<NewsSource[]>([]);
   const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   
-  // --- BROWSER NOTIFICATION STATE ---
+  // --- PWA & NOTIFICATION STATE ---
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
     'Notification' in window ? Notification.permission : 'default'
   );
+  
+  // PWA States
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   useEffect(() => {
     if (currentUser) {
       setAllUsers(prev => prev.map(u => u.id === currentUser.id ? currentUser : u));
     }
   }, [currentUser]);
+
+  // --- PWA LISTENERS ---
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    
+    // Catch the PWA install prompt
+    const handleBeforeInstall = (e: any) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+        console.log("PWA Install Prompt Captured");
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    };
+  }, []);
+
+  const installPwa = async () => {
+      if (!deferredPrompt) return;
+      
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+          console.log('User accepted the PWA install prompt');
+          setDeferredPrompt(null);
+      }
+  };
 
   const updateSettings = (newSettings: Partial<UserSettings>) => {
       setUserSettings(prev => ({ ...prev, ...newSettings }));
@@ -560,7 +599,11 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setCurrentUser, deleteItem, restoreItem, addRepertoire, addPost, sharePost, votePoll, toggleFinanceApproval, addEvent,
       handleEventAction, markAttendance, toggleFollow, addNewsSource,
       togglePostLike, addComment, editComment, deleteComment, toggleCommentLike,
-      notificationPermission, requestNotificationPermission, registerUser, updateSettings
+      notificationPermission, requestNotificationPermission, registerUser, updateSettings,
+      // PWA
+      isPwaInstallable: !!deferredPrompt,
+      installPwa,
+      isOffline
     }}>
       {children}
     </AppContext.Provider>
@@ -575,7 +618,7 @@ export const useApp = () => {
 
 // Authenticated App (Session Isolated)
 const AuthenticatedApp = () => {
-  const { currentUser, setCurrentUser, users, addPost, sharePost, posts, events, repertoire, finances, notificationPermission, requestNotificationPermission, userSettings, updateSettings } = useApp();
+  const { currentUser, setCurrentUser, users, addPost, sharePost, posts, events, repertoire, finances, notificationPermission, requestNotificationPermission, userSettings, updateSettings, isOffline } = useApp();
   const location = useLocation();
 
   if (!currentUser) return null; 
@@ -697,6 +740,14 @@ const AuthenticatedApp = () => {
   return (
     <div className="min-h-screen bg-navy-900 text-bege-100 font-sans pb-20 relative">
       
+      {/* --- OFFLINE BANNER --- */}
+      {isOffline && (
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center text-xs font-bold py-1 z-[60] flex items-center justify-center gap-2 animate-slide-down">
+            <WifiOff className="w-3 h-3" />
+            Você está offline. Algumas funções podem estar limitadas.
+        </div>
+      )}
+
       {notificationPermission === 'default' && (
          <div className="fixed top-20 left-4 right-4 z-[60] animate-bounce-in">
              <div className="bg-navy-800 border-l-4 border-ocre-500 rounded-r-lg shadow-2xl p-4 flex items-start justify-between gap-4">
@@ -727,7 +778,7 @@ const AuthenticatedApp = () => {
       )}
 
       {/* Mobile-First Header */}
-      <header className="sticky top-0 z-40 bg-navy-900/90 backdrop-blur-md border-b border-navy-700 px-4 py-3 flex justify-between items-center shadow-lg">
+      <header className={`sticky top-0 z-40 bg-navy-900/90 backdrop-blur-md border-b border-navy-700 px-4 py-3 flex justify-between items-center shadow-lg ${isOffline ? 'mt-6' : ''}`}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-ocre-600 rounded-xl flex items-center justify-center shadow-lg shadow-ocre-900/50">
             <Users className="w-6 h-6 text-white" />
