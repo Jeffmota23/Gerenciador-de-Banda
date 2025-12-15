@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Music, ArrowRight, ArrowLeft, User as UserIcon, Mail, Facebook, Chrome, Camera, AlertCircle, CheckCircle2, Loader2, Sparkles, LogOut, ShieldCheck, Lock } from 'lucide-react';
+import { Music, ArrowRight, ArrowLeft, User as UserIcon, Mail, Facebook, Chrome, Camera, AlertCircle, CheckCircle2, Loader2, Sparkles, LogOut, ShieldCheck, Lock, ChevronRight, Plus, UserPlus } from 'lucide-react';
 import { User, UserRole } from '../types';
 import { MOCK_USERS } from '../constants';
 import { useApp } from '../App';
@@ -22,12 +22,34 @@ interface SimulatedSession {
     avatarUrl: string;
 }
 
+// --- MOCK DEVICE ACCOUNTS (Simulates accounts already logged in on the phone/browser) ---
+const MOCK_GOOGLE_ACCOUNTS = [
+    { 
+        name: 'Jefferson Silva', 
+        email: 'jefferson.silva@gmail.com', 
+        avatarUrl: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80' 
+    },
+    { 
+        name: 'Maestro Augusto', 
+        email: 'maestro@bandsocial.com', 
+        avatarUrl: null 
+    }
+];
+
+const MOCK_FACEBOOK_ACCOUNTS = [
+    { 
+        name: 'Jefferson Silva', 
+        email: 'jefferson.silva@facebook.com', 
+        avatarUrl: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80' 
+    }
+];
+
 export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
   const { users, registerUser } = useApp();
   
   // Views: LOGIN -> Choice
-  // DETECTED_ACCOUNT -> Fast track
-  // SOCIAL_LOGIN_SIMULATION -> Social Auth
+  // DETECTED_ACCOUNT -> Fast track (App level)
+  // SOCIAL_LOGIN_SIMULATION -> Social Auth Window
   // EMAIL_AUTH -> Email + Password
   // REGISTER_FORM -> Final details
   const [view, setView] = useState<'LOGIN' | 'DETECTED_ACCOUNT' | 'SOCIAL_LOGIN_SIMULATION' | 'EMAIL_AUTH' | 'REGISTER_FORM'>('LOGIN');
@@ -35,8 +57,9 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
   const [authMethod, setAuthMethod] = useState<'EMAIL' | 'GOOGLE' | 'FACEBOOK' | null>(null);
   const [simulatedSession, setSimulatedSession] = useState<SimulatedSession | null>(null);
 
-  // Social Login Input State (To allow typing different emails in the simulator)
+  // Social Login State
   const [socialEmailInput, setSocialEmailInput] = useState('');
+  const [showAccountList, setShowAccountList] = useState(true); // Toggle between "List of accounts" and "Manual Input"
 
   // Email/Password Auth State
   const [manualEmail, setManualEmail] = useState('');
@@ -89,7 +112,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
 
   // --- ACTIONS ---
 
-  const checkUserAndProceed = (email: string, name?: string, avatarUrl?: string) => {
+  const checkUserAndProceed = (email: string, name?: string, avatarUrl?: string | null) => {
       // 1. LOGIN: Check if user already exists based on authenticated email
       const existingUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
       
@@ -122,7 +145,9 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
 
   const handleSocialLoginClick = (method: 'GOOGLE' | 'FACEBOOK') => {
       setAuthMethod(method);
-      // Pre-fill simulator for convenience, but user can change it
+      setShowAccountList(true); // Always start showing list if available
+      
+      // Pre-fill simulator input for convenience in manual mode
       if (method === 'GOOGLE') setSocialEmailInput('usuario.novo@gmail.com');
       else setSocialEmailInput('usuario.novo@facebook.com');
       
@@ -147,13 +172,11 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
           return;
       }
 
-      // If it's the specific "Jefferson" demo email
-      if (finalEmail === 'jefferson.silva@gmail.com') {
-          finalName = 'Jefferson Silva';
-          finalAvatar = 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&q=80';
-      }
-
       checkUserAndProceed(finalEmail, finalName, finalAvatar);
+  };
+
+  const handleAccountSelect = (account: { name: string, email: string, avatarUrl: string | null }) => {
+      checkUserAndProceed(account.email, account.name, account.avatarUrl);
   };
 
   const handleEmailAuthSubmit = () => {
@@ -206,10 +229,6 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
       }
   };
 
-  const validateNickname = (nick: string) => {
-      return !users.some(u => u.nickname.toLowerCase() === nick.toLowerCase());
-  };
-
   const handleRegisterSubmit = () => {
       setFormError(null);
       const required = ['name', 'nickname', 'cpf', 'rg', 'phone', 'cep', 'street', 'number', 'city', 'state', 'instrument', 'experienceTime'];
@@ -220,12 +239,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
           return;
       }
 
-      if (!validateNickname(formData.nickname)) {
-          setFormError("Este nickname já está em uso.");
-          return;
-      }
-
-      registerUser({
+      const result = registerUser({
           name: formData.name,
           nickname: formData.nickname,
           email: formData.email,
@@ -243,6 +257,10 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
           },
           avatarUrl: avatarPreview || undefined
       });
+
+      if (!result.success) {
+          setFormError(result.message || "Erro ao registrar usuário.");
+      }
   };
 
   const inputStyle = "bg-navy-900 border border-navy-600 rounded p-3 text-sm text-bege-100 w-full outline-none focus:border-ocre-500 placeholder-navy-500 transition-colors";
@@ -388,7 +406,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                 
                 <div className="flex-1 flex flex-col justify-center h-full">
                     {authMethod === 'GOOGLE' ? (
-                        <div className="bg-white text-gray-800 p-8 rounded-xl flex flex-col items-center gap-4 shadow-2xl relative overflow-hidden">
+                        <div className="bg-white text-gray-800 p-8 rounded-xl flex flex-col items-center gap-4 shadow-2xl relative overflow-hidden min-h-[400px]">
                             {/* Fake Browser Bar */}
                             <div className="absolute top-0 left-0 right-0 h-6 bg-gray-200 flex items-center px-2 gap-1">
                                 <div className="w-2 h-2 rounded-full bg-red-400"></div>
@@ -399,30 +417,65 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
 
                             <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-12 h-12 mb-2 mt-4" alt="Google" />
                             <h3 className="text-xl font-medium text-center">Fazer login com o Google</h3>
-                            <p className="text-sm text-gray-600 text-center">Prosseguir para <strong>BandSocial</strong></p>
+                            <p className="text-sm text-gray-600 text-center mb-2">Prosseguir para <strong>BandSocial</strong></p>
                             
-                            <div className="w-full space-y-4 mt-6">
-                                <div className="border border-gray-300 rounded px-3 py-2 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
-                                    <p className="text-xs text-gray-500">Email ou telefone</p>
-                                    <input 
-                                        className="w-full outline-none text-gray-900 text-sm bg-white" 
-                                        value={socialEmailInput}
-                                        onChange={(e) => setSocialEmailInput(e.target.value)}
-                                        autoFocus
-                                    />
+                            {showAccountList ? (
+                                <div className="w-full space-y-2 mt-2 animate-fade-in">
+                                    <p className="text-xs text-gray-500 mb-2 font-medium">Escolha uma conta deste dispositivo:</p>
+                                    {MOCK_GOOGLE_ACCOUNTS.map((account, idx) => (
+                                        <div 
+                                            key={idx}
+                                            onClick={() => handleAccountSelect(account)}
+                                            className="flex items-center gap-3 p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer rounded transition-colors"
+                                        >
+                                            {account.avatarUrl ? (
+                                                <img src={account.avatarUrl} className="w-8 h-8 rounded-full" alt="avatar" />
+                                            ) : (
+                                                <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
+                                                    {account.name.charAt(0)}
+                                                </div>
+                                            )}
+                                            <div className="flex-1">
+                                                <p className="text-sm font-bold text-gray-800">{account.name}</p>
+                                                <p className="text-xs text-gray-500">{account.email}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    
+                                    <div 
+                                        onClick={() => setShowAccountList(false)}
+                                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-50 rounded transition-colors mt-2"
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                            <UserIcon className="w-4 h-4 text-gray-500" />
+                                        </div>
+                                        <p className="text-sm font-bold text-gray-700">Usar outra conta</p>
+                                    </div>
                                 </div>
-                                <div className="text-right">
-                                    <span className="text-xs text-blue-600 font-bold cursor-pointer hover:underline">Esqueceu seu e-mail?</span>
+                            ) : (
+                                <div className="w-full space-y-4 mt-2 animate-fade-in">
+                                    <div className="border border-gray-300 rounded px-3 py-2 bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                        <p className="text-xs text-gray-500">Email ou telefone</p>
+                                        <input 
+                                            className="w-full outline-none text-gray-900 text-sm bg-white" 
+                                            value={socialEmailInput}
+                                            onChange={(e) => setSocialEmailInput(e.target.value)}
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xs text-blue-600 font-bold cursor-pointer hover:underline">Esqueceu seu e-mail?</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Não está no seu computador? Use o modo Convidado para fazer login com privacidade.</p>
+                                    <div className="flex justify-end gap-2 mt-4">
+                                        <button onClick={() => setShowAccountList(true)} className="text-blue-600 font-bold text-sm px-4 py-2 rounded hover:bg-blue-50">Voltar</button>
+                                        <button onClick={handleSocialLoginSubmit} className="bg-[#1a73e8] text-white font-medium px-6 py-2 rounded hover:bg-[#1557b0] transition-colors shadow">Próxima</button>
+                                    </div>
                                 </div>
-                                <p className="text-xs text-gray-500">Não está no seu computador? Use o modo Convidado para fazer login com privacidade.</p>
-                                <div className="flex justify-end gap-2 mt-4">
-                                    <button onClick={() => setView('LOGIN')} className="text-blue-600 font-bold text-sm px-4 py-2 rounded hover:bg-blue-50">Criar conta</button>
-                                    <button onClick={handleSocialLoginSubmit} className="bg-[#1a73e8] text-white font-medium px-6 py-2 rounded hover:bg-[#1557b0] transition-colors shadow">Próxima</button>
-                                </div>
-                            </div>
+                            )}
                         </div>
                     ) : (
-                        <div className="bg-[#f0f2f5] text-gray-900 p-8 rounded-xl flex flex-col items-center gap-4 shadow-2xl relative overflow-hidden">
+                        <div className="bg-[#f0f2f5] text-gray-900 p-8 rounded-xl flex flex-col items-center gap-4 shadow-2xl relative overflow-hidden min-h-[400px]">
                              {/* Fake Browser Bar */}
                              <div className="absolute top-0 left-0 right-0 h-6 bg-gray-300 flex items-center px-2 gap-1 border-b border-gray-400">
                                 <span className="text-[8px] text-gray-600 ml-auto mr-auto">facebook.com/login</span>
@@ -430,21 +483,49 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
 
                             <Facebook className="w-16 h-16 text-[#1877F2] mb-2 mt-6" />
                             
-                            <div className="w-full space-y-3 mt-4 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                <p className="text-center text-sm mb-4">Faça login no Facebook para usar sua conta com <strong>BandSocial</strong>.</p>
-                                <input 
-                                    className="w-full bg-white text-gray-800 border border-gray-300 rounded p-3 text-sm placeholder-gray-500 focus:border-blue-500 outline-none" 
-                                    placeholder="Email ou telefone" 
-                                    value={socialEmailInput}
-                                    onChange={(e) => setSocialEmailInput(e.target.value)}
-                                    autoFocus
-                                />
-                                <input className="w-full bg-white text-gray-800 border border-gray-300 rounded p-3 text-sm placeholder-gray-500 focus:border-blue-500 outline-none" type="password" placeholder="Senha" defaultValue="123456" />
-                                <button onClick={handleSocialLoginSubmit} className="w-full bg-[#1877F2] text-white font-bold py-3 rounded hover:bg-[#166fe5] transition-colors shadow-lg mt-2">Entrar</button>
-                                <div className="text-center mt-2">
-                                    <a href="#" className="text-xs text-[#1877F2] hover:underline">Esqueceu a conta?</a>
+                            {showAccountList ? (
+                                <div className="w-full space-y-4 animate-fade-in">
+                                    <p className="text-center text-sm font-bold text-gray-700">Contas recentes neste dispositivo</p>
+                                    <div className="space-y-3">
+                                        {MOCK_FACEBOOK_ACCOUNTS.map((account, idx) => (
+                                            <div 
+                                                key={idx}
+                                                onClick={() => handleAccountSelect(account)}
+                                                className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
+                                            >
+                                                <img src={account.avatarUrl} className="w-12 h-12 rounded shadow-sm" alt="fb avatar" />
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold text-[#1877F2]">Continuar como {account.name}</p>
+                                                    <p className="text-[10px] text-gray-500">{account.email}</p>
+                                                </div>
+                                                <ChevronRight className="w-4 h-4 text-gray-400" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2 mt-6 justify-center cursor-pointer text-[#1877F2] hover:underline" onClick={() => setShowAccountList(false)}>
+                                        <Plus className="w-4 h-4" />
+                                        <span className="text-sm font-bold">Entrar em outra conta</span>
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="w-full space-y-3 mt-4 bg-white p-6 rounded-lg shadow-sm border border-gray-200 animate-fade-in">
+                                    <p className="text-center text-sm mb-4">Faça login no Facebook para usar sua conta com <strong>BandSocial</strong>.</p>
+                                    <input 
+                                        className="w-full bg-white text-gray-800 border border-gray-300 rounded p-3 text-sm placeholder-gray-500 focus:border-blue-500 outline-none" 
+                                        placeholder="Email ou telefone" 
+                                        value={socialEmailInput}
+                                        onChange={(e) => setSocialEmailInput(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <input className="w-full bg-white text-gray-800 border border-gray-300 rounded p-3 text-sm placeholder-gray-500 focus:border-blue-500 outline-none" type="password" placeholder="Senha" defaultValue="123456" />
+                                    <button onClick={handleSocialLoginSubmit} className="w-full bg-[#1877F2] text-white font-bold py-3 rounded hover:bg-[#166fe5] transition-colors shadow-lg mt-2">Entrar</button>
+                                    <div className="text-center mt-2 flex justify-between items-center px-1">
+                                        <a href="#" className="text-xs text-[#1877F2] hover:underline">Esqueceu a conta?</a>
+                                        <button onClick={() => setShowAccountList(true)} className="text-xs text-gray-500 hover:text-gray-800 hover:underline">Voltar</button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -635,7 +716,7 @@ export const AuthScreen: React.FC<Props> = ({ onLogin }) => {
                     </div>
 
                     {formError && (
-                        <div className="bg-red-900/50 border border-red-500/50 p-3 rounded text-xs text-red-200 flex items-start gap-2">
+                        <div className="bg-red-900/50 border border-red-500/50 p-3 rounded text-xs text-red-200 flex items-start gap-2 animate-bounce-in">
                             <AlertCircle className="w-4 h-4 flex-shrink-0" /> {formError}
                         </div>
                     )}

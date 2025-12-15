@@ -272,7 +272,7 @@ export interface AppContextType extends AppState {
   notificationPermission: NotificationPermission;
   requestNotificationPermission: () => Promise<void>;
   
-  registerUser: (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => void;
+  registerUser: (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => { success: boolean; message?: string };
   updateSettings: (newSettings: Partial<UserSettings>) => void;
   updateUserRole: (userId: string, newRole: UserRole) => void;
 

@@ -19,7 +19,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { 
   LayoutDashboard, Users, Calendar, LibraryBig, 
-  Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check, Bell, BellRing, WifiOff
+  Settings, Info, ShieldAlert, LogOut, Video, Landmark, Briefcase, Menu, X, ChevronUp, AlertTriangle, Plus, MapPin, Search, CheckSquare, Square, Check, Bell, BellRing, WifiOff, Download
 } from 'lucide-react';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -45,16 +45,41 @@ const DEFAULT_SETTINGS: UserSettings = {
   }
 };
 
+// --- PERSISTENCE HELPER ---
+const usePersistentState = <T,>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
+  const [state, setState] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : initialValue;
+    } catch (e) {
+      console.error(`Error loading ${key}`, e);
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch (e) {
+      console.error(`Error saving ${key}`, e);
+    }
+  }, [key, state]);
+
+  return [state, setState];
+};
+
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [allUsers, setAllUsers] = useState<User[]>(MOCK_USERS);
-  const [repertoire, setRepertoire] = useState<RepertoireItem[]>(INITIAL_REPERTOIRE);
-  const [trashBin, setTrashBin] = useState<DeletedItem[]>([]);
-  const [posts, setPosts] = useState<PostItem[]>(INITIAL_POSTS);
-  const [finances, setFinances] = useState<FinanceItem[]>(MOCK_FINANCES);
-  const [events, setEvents] = useState<EventItem[]>(INITIAL_EVENTS);
-  const [newsSources, setNewsSources] = useState<NewsSource[]>([]);
-  const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  
+  // --- DATABASE TABLES (Persistent State) ---
+  const [allUsers, setAllUsers] = usePersistentState<User[]>('bandSocial_users', MOCK_USERS);
+  const [repertoire, setRepertoire] = usePersistentState<RepertoireItem[]>('bandSocial_repertoire', INITIAL_REPERTOIRE);
+  const [trashBin, setTrashBin] = usePersistentState<DeletedItem[]>('bandSocial_trash', []);
+  const [posts, setPosts] = usePersistentState<PostItem[]>('bandSocial_posts', INITIAL_POSTS);
+  const [finances, setFinances] = usePersistentState<FinanceItem[]>('bandSocial_finances', MOCK_FINANCES);
+  const [events, setEvents] = usePersistentState<EventItem[]>('bandSocial_events', INITIAL_EVENTS);
+  const [newsSources, setNewsSources] = usePersistentState<NewsSource[]>('bandSocial_news', []);
+  const [userSettings, setUserSettings] = usePersistentState<UserSettings>('bandSocial_settings', DEFAULT_SETTINGS);
   
   // --- PWA & NOTIFICATION STATE ---
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
@@ -67,6 +92,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   useEffect(() => {
     if (currentUser) {
+      // Sync current user changes back to the "Database"
       setAllUsers(prev => prev.map(u => u.id === currentUser.id ? currentUser : u));
     }
   }, [currentUser]);
@@ -619,6 +645,28 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   const registerUser = (userData: Omit<User, 'id' | 'role' | 'xp' | 'level' | 'attendanceRate' | 'following'>) => {
+      // 1. Data Integrity & Uniqueness Checks
+      const emailExists = allUsers.some(u => u.email?.toLowerCase() === userData.email?.toLowerCase());
+      if (emailExists) {
+          return { success: false, message: "Este e-mail já está cadastrado no sistema." };
+      }
+
+      const cpfExists = allUsers.some(u => u.cpf === userData.cpf);
+      if (cpfExists) {
+          return { success: false, message: "Este CPF já está associado a uma conta." };
+      }
+
+      const rgExists = allUsers.some(u => u.rg === userData.rg);
+      if (rgExists) {
+          return { success: false, message: "Este RG já está registrado." };
+      }
+
+      const nicknameExists = allUsers.some(u => u.nickname.toLowerCase() === userData.nickname.toLowerCase());
+      if (nicknameExists) {
+          return { success: false, message: "Este nickname já está em uso. Por favor escolha outro." };
+      }
+
+      // 2. Create User
       const newUser: User = {
           ...userData,
           id: `u${Date.now()}`,
@@ -630,11 +678,11 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       };
       
       setAllUsers(prev => [...prev, newUser]);
-      setCurrentUser(newUser); 
+      setCurrentUser(newUser);
+      return { success: true };
   };
 
   const updateUserRole = (userId: string, newRole: UserRole) => {
-      // 1. Update Global List
       setAllUsers(prev => prev.map(u => {
           if (u.id === userId) {
               return { ...u, role: newRole };
@@ -642,7 +690,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           return u;
       }));
 
-      // 2. Update Current User if applicable (Prevent Stale State)
       if (currentUser && currentUser.id === userId) {
           setCurrentUser({ ...currentUser, role: newRole });
       }
@@ -669,6 +716,47 @@ export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) throw new Error("useApp must be used within AppProvider");
   return context;
+};
+
+// --- NEW COMPONENT: INSTALL BANNER ---
+const InstallBanner = () => {
+  const { isPwaInstallable, installPwa, currentUser } = useApp();
+  const [isVisible, setIsVisible] = useState(true);
+
+  if (!isPwaInstallable || !isVisible) return null;
+
+  return (
+    <div className={`fixed left-4 right-4 z-[100] animate-slide-up md:hidden ${currentUser ? 'bottom-20' : 'bottom-4'}`}>
+      <div className="bg-navy-900/95 backdrop-blur-md border border-ocre-500/50 p-4 rounded-xl shadow-2xl flex items-center justify-between relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-1 h-full bg-ocre-500"></div>
+        
+        <div className="flex items-center gap-3">
+           <div className="bg-navy-800 p-2 rounded-lg text-ocre-500 border border-navy-700">
+              <Download className="w-6 h-6" />
+           </div>
+           <div>
+              <h4 className="font-bold text-bege-50 text-sm">Baixar App Android</h4>
+              <p className="text-[10px] text-bege-200">Instale para acesso offline.</p>
+           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+            <button 
+                onClick={installPwa}
+                className="bg-ocre-600 hover:bg-ocre-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow transition-colors"
+            >
+                Instalar
+            </button>
+            <button 
+                onClick={() => setIsVisible(false)}
+                className="p-1.5 text-gray-400 hover:text-white bg-black/20 rounded-full"
+            >
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Authenticated App (Session Isolated)
@@ -992,11 +1080,12 @@ const NavLink = ({ to, icon, label, activeColor = 'text-ocre-500', hasNotificati
 const MainApp = () => {
   const { currentUser, setCurrentUser } = useApp();
 
-  if (!currentUser) {
-    return <AuthScreen onLogin={setCurrentUser} />;
-  }
-
-  return <AuthenticatedApp key={currentUser.id} />;
+  return (
+    <>
+      {currentUser ? <AuthenticatedApp key={currentUser.id} /> : <AuthScreen onLogin={setCurrentUser} />}
+      <InstallBanner />
+    </>
+  );
 };
 
 export default function App() {
